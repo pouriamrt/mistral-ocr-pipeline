@@ -8,5 +8,8 @@ dependencies = [
     "dotenv>=0.9.9",
     "ipython>=9.6.0",
     "mistralai>=1.9.11",
+    "notebook>=7.4.7",
+    "numpy>=2.3.3",
+    "pandas>=2.3.3",
     "tqdm>=4.67.1",
 ]
