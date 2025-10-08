@@ -20,6 +20,11 @@ class ExtractionPayload(BaseModel):
         alias="Journal",
         description="Single journal or publication name (only one value allowed)."
     )
+    title: Optional[str] = Field(
+        default=None,
+        alias="Title",
+        description="Title of the article."
+    )
     journal_field_specialty: Optional[str] = Field(
         default=None,
         alias="Journal Field/Specialty",
