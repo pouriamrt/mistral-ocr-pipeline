@@ -12,7 +12,7 @@ from mistralai import Mistral
 
 from to_markdown import convert_to_markdown
 from get_annotations import get_annotation_async 
-from utils import encode_pdf
+from utils import encode_pdf, get_pdf_page_count, merge_multiple_dicts_async
 
 load_dotenv(override=True)
 
@@ -22,8 +22,9 @@ OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 FINAL_OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
 MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "3"))
+MAX_PAGES_PER_REQ = 8
 
-async def process_one_pdf(pdf_path: Path, client: Mistral, sem: asyncio.Semaphore) -> dict | None:
+async def process_one_pdf_chunk(pdf_path: Path, client: Mistral, sem: asyncio.Semaphore, pages_chunk: list[int]) -> dict | None:
     """Process a single PDF:
        - encode PDF
        - call OCR with annotations (offloaded)
@@ -39,7 +40,7 @@ async def process_one_pdf(pdf_path: Path, client: Mistral, sem: asyncio.Semaphor
 
         # 2) OCR call (blocking network)
         try:
-            annotations_response = await get_annotation_async(client, base64_pdf, image_annotation=False)
+            annotations_response = await get_annotation_async(client, base64_pdf, pages=pages_chunk, image_annotation=False)
         except Exception as e:
             print(f"[ERROR] OCR failed for {pdf_path.name}: {e}")
             return None
@@ -54,13 +55,27 @@ async def process_one_pdf(pdf_path: Path, client: Mistral, sem: asyncio.Semaphor
             row = None
 
         # 4) Write markdown to file
-        out_md = OUTPUT_DIR / f"{pdf_path.stem}.md"
+        out_md = OUTPUT_DIR / f"{pdf_path.stem}_{int(min(pages_chunk)/MAX_PAGES_PER_REQ)}.md"
         try:
             await asyncio.to_thread(convert_to_markdown, annotations_response, str(out_md))
         except Exception as e:
             print(f"[ERROR] Writing markdown failed for {pdf_path.name}: {e}")
 
         return row
+
+async def process_one_pdf(pdf_path: Path, client: Mistral, sem: asyncio.Semaphore) -> dict | None:
+    pages = await get_pdf_page_count(pdf_path)
+    
+    if pages < MAX_PAGES_PER_REQ:
+        return await process_one_pdf_chunk(pdf_path, client, sem, pages_chunk=list(range(pages)))
+    else:
+        rows = []
+        for chunk in range(0, pages, MAX_PAGES_PER_REQ):
+            result = await process_one_pdf_chunk(pdf_path, client, sem, pages_chunk=list(range(chunk, chunk + MAX_PAGES_PER_REQ)))
+            if result is not None:
+                rows.append(result)
+        return await merge_multiple_dicts_async(rows)
+        
 
 async def amain():
     api_key = os.getenv("MISTRAL_API_KEY")
@@ -69,7 +84,7 @@ async def amain():
 
     client = Mistral(api_key=api_key)
 
-    list_of_pdfs = list(Path("papers").glob("*.pdf"))[:3]
+    list_of_pdfs = list(Path("papers").glob("*.pdf"))[:6]
     if not list_of_pdfs:
         print("No PDFs found in ./papers")
         return

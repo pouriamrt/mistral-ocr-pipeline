@@ -13,5 +13,6 @@ dependencies = [
     "numpy>=2.3.3",
     "pandas>=2.3.3",
     "pyarrow>=21.0.0",
+    "pypdf>=6.1.1",
     "tqdm>=4.67.1",
 ]
