@@ -84,7 +84,7 @@ async def amain():
 
     client = Mistral(api_key=api_key)
 
-    list_of_pdfs = list(Path("papers").glob("*.pdf"))[:6]
+    list_of_pdfs = list(Path("papers").glob("*.pdf"))
     if not list_of_pdfs:
         print("No PDFs found in ./papers")
         return
