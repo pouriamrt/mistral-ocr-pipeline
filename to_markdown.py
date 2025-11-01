@@ -9,8 +9,8 @@ def replace_images_in_markdown_annotated(markdown_str: str, images_dict: dict) -
         )
     return markdown_str
 
-def get_combined_markdown_annotated(ocr_response: OCRResponse) -> str:
-    markdowns: list[str] = ["**" + ocr_response.document_annotation + "**"]
+def get_combined_markdown_annotated(ocr_response: OCRResponse, annotations_response: str) -> str:
+    markdowns: list[str] = ["**" + annotations_response + "**"]
     for page in ocr_response.pages:
         image_data = {}
         for img in getattr(page, "images", []):
@@ -18,7 +18,7 @@ def get_combined_markdown_annotated(ocr_response: OCRResponse) -> str:
         markdowns.append(replace_images_in_markdown_annotated(page.markdown, image_data))
     return "\n\n".join(markdowns)
 
-def convert_to_markdown(annotations_response: OCRResponse, out_file: str) -> str:
-    markdown = get_combined_markdown_annotated(annotations_response)
+def convert_to_markdown(annotations_response: dict, ocr_response: OCRResponse, out_file: str) -> str:
+    markdown = get_combined_markdown_annotated(ocr_response, str(annotations_response))
     Path(out_file).write_text(markdown, encoding="utf-8")
     return markdown

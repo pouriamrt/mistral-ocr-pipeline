@@ -6,12 +6,13 @@ from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
-from tqdm import tqdm
+# from tqdm import tqdm
+from alive_progress import alive_bar
 
 from mistralai import Mistral
 
 from to_markdown import convert_to_markdown
-from get_annotations import get_annotation_async 
+from get_annotations import run_all_payloads 
 from utils import encode_pdf, get_pdf_page_count, merge_multiple_dicts_async
 
 load_dotenv(override=True)
@@ -21,7 +22,7 @@ FINAL_OUTPUT_DIR = OUTPUT_DIR / "aggregated"
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 FINAL_OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
-MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "3"))
+MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "4"))
 MAX_PAGES_PER_REQ = 8
 IMAGE_ANNOTATION = True
 OVERWRITE_MD = True
@@ -43,15 +44,14 @@ async def process_one_pdf_chunk(pdf_path: Path, client: Mistral, sem: asyncio.Se
 
         # 2) OCR call (blocking network)
         try:
-            annotations_response = await get_annotation_async(client, base64_pdf, pages=pages_chunk, image_annotation=image_annotation)
+            annotations_response, ocr_response = await run_all_payloads(client, base64_pdf, pages=pages_chunk, image_annotation=image_annotation)
         except Exception as e:
             print(f"[ERROR] OCR failed for {pdf_path.name}: {e}")
             return None
 
         # 3) Parse annotations -> dict row
         try:
-            response_dict = json.loads(annotations_response.model_dump_json())
-            document_annotations = json.loads(response_dict["document_annotation"])
+            document_annotations = annotations_response
             row = {k: document_annotations.get(k) for k in document_annotations.keys()}
         except Exception as e:
             print(f"[ERROR] Failed to parse annotations for {pdf_path.name}: {e}")
@@ -61,7 +61,7 @@ async def process_one_pdf_chunk(pdf_path: Path, client: Mistral, sem: asyncio.Se
         out_md = OUTPUT_DIR / f"{pdf_path.stem}_{int(min(pages_chunk)/MAX_PAGES_PER_REQ)}.md"
         if not Path(out_md).exists() or OVERWRITE_MD:
             try:
-                await asyncio.to_thread(convert_to_markdown, annotations_response, str(out_md))
+                await asyncio.to_thread(convert_to_markdown, document_annotations, ocr_response, str(out_md))
             except Exception as e:
                 print(f"[ERROR] Writing markdown failed for {pdf_path.name}: {e}")
 
@@ -109,7 +109,6 @@ async def amain():
         print("No PDFs found in ./papers")
         return
     print(f"Processing {len(list_of_pdfs)} PDFs with image annotation: {IMAGE_ANNOTATION}")
-    list_of_pdfs = list_of_pdfs[4:5]
     
     sem = asyncio.Semaphore(MAX_CONCURRENCY)
     start_time = time()
@@ -119,10 +118,12 @@ async def amain():
 
     rows = []
     # progress over as_completed to keep tqdm responsive
-    for fut in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Processing PDFs"):
-        result = await fut
-        if result is not None:
-            rows.append(result)
+    with alive_bar(len(tasks), title="Processing PDFs") as bar:
+        for fut in asyncio.as_completed(tasks):
+            result = await fut
+            if result is not None:
+                rows.append(result)
+            bar()
 
     # build & save dataframe
     if rows:

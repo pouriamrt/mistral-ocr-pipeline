@@ -13,105 +13,120 @@ class Image(BaseModel):
     description: str = Field(..., description="A description of the image.")
     
 
-class ExtractionPayload(BaseModel):
+from typing import List, Optional, Literal
+from pydantic import BaseModel, Field, ConfigDict
+
+# -------------------------------
+# 1) Bibliography & Study Design
+# -------------------------------
+class ExtractionMetaDesign(BaseModel):
     """
-    Global guidelines for the whole extraction:
-    "1) do not infer or guess."
-    "2) "null" is correct if unsure."
-    "3) only output info that is explicitly in the PDF."
-    "4) if ambiguous or unclear, set field null, do not guess."
-    "5) numeric values must be exact."
-    "6) if conflicting values appear in different pages, choose the one most clearly stated (title → early pages; patient counts → methods/results)."
-    "7) do not hallucinate text or cite external knowledge."
-    "8) IGNORE the information in the References and Acknowledgments sections and items in them."
+    Guidelines:
+    1) Do not infer or guess. 2) Use null if unsure.
+    3) Output only facts explicitly in the PDF.
+    4) If ambiguous, set null (do not guess).
+    5) Numeric values must be exact.
+    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    7) Do not use external knowledge.
+    8) Ignore References and Acknowledgments content.
     """
-    ######################################### Journal and Author information #########################################
-    journal: Optional[str] = Field(
-        default=None,
-        alias="Journal",
-        description="Single journal or publication name (only one value allowed)."
-    )
-    title: Optional[str] = Field(
-        default=None,
-        alias="Title",
-        description="Title of the article."
-    )
-    journal_field_specialty: Optional[str] = Field(
-        default=None,
-        alias="Journal Field/Specialty",
-        description="Discipline or specialty focus of the journal (e.g., Cardiology, Hematology)."
-    )
-    publication_year: Optional[str] = Field(
-        default=None,
-        alias="Publication Year",
-        description="Four-digit publication year of the article (e.g., '2022')."
-    )
-    affiliation_of_first_author: Optional[str] = Field(
-        default=None,
-        alias="Affiliation of First Author",
-        description="Institution/department of the first-listed author (verbatim if possible)."
-    )
-    country_of_first_author: Optional[str] = Field(
-        default=None,
-        alias="Country of First Author",
-        description="Country associated with the first author’s affiliation."
-    )
-    
-    ######################################### Study Design #########################################
+    # Journal & author info
+    journal: Optional[str] = Field(default=None, alias="Journal", description="Single journal/publication name.")
+    title: Optional[str] = Field(default=None, alias="Title", description="Title of the article.")
+    journal_field_specialty: Optional[
+        Literal[
+            "Cardiology - cardiovascular medicine, electrophysiology, vascular medicine, cardiac surgery, and transplantation",
+            "Hematology + Thrombosis/Haemostasis + Oncology - includes hematology/oncology, coagulation, thrombosis, thrombolysis, APS, and malignant hematology",
+            "Pharmacology + Clinical Pharmacology + Pharmacy + Pharmacokinetics/Pharmacodynamics - includes pharmacogenetics, pharmacometrics, toxicology, drug metabolism, pharmacotherapy, pharmaceutics, and pharmacoeconomics",
+            "Internal/General Medicine - general medicine, geriatrics, nephrology, endocrinology, respiratory, and emergency/internal medicine subspecialties",
+            "Neurology + Neurosurgery - stroke, neuropharmacology, spine surgery, neurocritical care, and electrophysiology",
+            "Anesthesiology + Critical Care + Perioperative/Trauma Medicine - pain management, intensive care, trauma and emergency surgery",
+            "Pediatrics + Transplantation + Genetics - pediatric hematology/oncology, congenital and genetic medicine, transplantation",
+            "Laboratory + Analytical + Clinical Chemistry Sciences - bioanalysis, mass spectrometry, chromatography, diagnostics, and biochemistry"
+        ]
+    ] = Field(default=None, alias="Journal Field/Specialty", description="Discipline/specialty of the journal.")
+    publication_year: Optional[str] = Field(default=None, alias="Publication Year", description="Four-digit year (e.g., '2022').")
+    affiliation_of_first_author: Optional[str] = Field(default=None, alias="Affiliation of First Author")
+    country_of_first_author: Optional[str] = Field(default=None, alias="Country of First Author")
+
+    # Study design
     study_design: Optional[
         Literal[
-            "Prospective/Retrospective/Cross-sectional",
-            "Case Report",
-            "Case Series",
-            "Cohort (Interventional)",
-            "Cohort (Observational)",
             "Randomized Controlled Trial",
-            "Pharmacokinetic Analysis",
-            "Other / Not specified",
+            "Cohort Study",
+            "Non-Randomized Experimental Study",
+            "Non-Randomized Observational Study",
+            "Cross-Sectional Study",
+            "Case-Control Study",
+            "Pharmacokinetic Study",
+            "In Silico Simulation Analysis",
+            "Systematic Review",
+            "Qualitative Research",
+            "Diagnostic Test Accuracy Study",
+            "Case Series",
+            "Case Report",
+            "Other"
         ]
-    ] = Field(
-        default=None, 
-        alias="Study Design",
-        description="Type of study design identified in the paper."
+    ] = Field(default=None, alias="Study Design", description="Study design (controlled list).")
+    study_design_sentence_from_text: Optional[str] = Field(
+        default=None, alias="Study Design Sentence from Text",
+        description="Exact sentence containing the study design."
     )
-    
-    ######################################### Patient Population #########################################
-    total_patients: Optional[int] = Field(
-        default=None,
-        alias="Patient Population",
-        description="Total number of patients included in the study."
-    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+# ---------------------------------------
+# 2) Population, Indications, Subgroups
+# ---------------------------------------
+class ExtractionPopulationIndications(BaseModel):
+    """
+    Guidelines:
+    1) Do not infer or guess. 2) Use null if unsure.
+    3) Output only facts explicitly in the PDF.
+    4) If ambiguous, set null (do not guess).
+    5) Numeric values must be exact.
+    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    7) Do not use external knowledge.
+    8) Ignore References and Acknowledgments content.
+    """
+    # Patient population
+    total_patients: Optional[int] = Field(default=None, alias="Patient Population", description="Total number of patients.")
     total_patients_sentence_from_text: Optional[str] = Field(
-        default=None,
-        alias="Patient Population Sentence from Text",
-        description="Sentence from the text that contains the total number of patients included in the study."
+        default=None, alias="Patient Population Sentence from Text",
+        description="Exact sentence with total patients."
     )
-    
+
+    # DOACs included (measured)
     doacs_included: Optional[
-        List[
-            Literal[
-                "Apixaban", "Rivaroxaban", "Edoxaban", "Betrixaban", "Dabigatran"]
-            ]
-        ] = Field(default=None, 
-                  alias="Patient population 1", 
-                  description="List of DOACs included in the study.")
-    
-    indication_for_anticoagulation: Optional[
-        List[
-            Literal[
-                "AF",
-                "Treatment of VTE",
-                "Prevention of VTE",
-                "Other",
-                "Not Reported"
-            ]
-        ]
+        List[Literal["Apixaban", "Rivaroxaban", "Edoxaban", "Betrixaban", "Dabigatran"]]
     ] = Field(
-        default=None,
-        alias="Patient population 2",
-        description="List of indications for anticoagulation reported in the study."
+        default=None, alias="Patient population 1",
+        description=(
+            "Include a DOAC ONLY if its level was actually measured in this study. "
+            "Do not include DOACs only mentioned in Intro/Discussion/external citations."
+        )
     )
-    
+    doacs_included_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="DOACs Included Sentence from Text",
+        description="Exact sentences with the included DOACs."
+    )
+
+    # Indications for anticoagulation (must apply to measured population)
+    indication_for_anticoagulation: Optional[
+        List[Literal["AF", "Treatment of VTE", "Prevention of VTE", "Other", "Not Reported"]]
+    ] = Field(
+        default=None, alias="Patient population 2",
+        description=(
+            "Only include an indication (e.g., AF, VTE) if patients whose DOAC levels were measured had that indication."
+        )
+    )
+    indication_for_anticoagulation_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Indications for Anticoagulation Sentence from Text",
+        description="Exact sentences with indications."
+    )
+
+    # Relevant subgroups (must be explicitly studied/measured)
     relevant_subgroups: Optional[
         List[
             Literal[
@@ -129,149 +144,210 @@ class ExtractionPayload(BaseModel):
             ]
         ]
     ] = Field(
-        default=None,
-        alias="Patient population 3",
-        description="Relevant patient subgroups or focus areas studied in the paper."
+        default=None, alias="Patient population 3",
+        description=(
+            "Include only if DOAC levels were measured in that subgroup within this study."
+        )
     )
-    
-    ######################################### Main Reasons #########################################
-    main_reasons: Optional[
+    relevant_subgroups_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Relevant Subgroups Sentence from Text",
+        description="Exact sentences with the relevant subgroups."
+    )
+
+    # Indications for DOAC level measurement
+    indications_for_doac_level_measurement: Optional[
         List[
             Literal[
                 "Confirm adherence",
-                "Evaluate DOAC level exposure",
-                "Identify predictors of DOAC level exposure",
-                "Cmax, Ctrough, AUC",
-                "Guide clinical decision-making",
-                "Urgent surgery",
-                "Major bleeding and reversal agent administration",
-                "Thrombolysis",
-                "Guide dose adjustment",
-                "Measure correlation with other laboratory techniques",
-                "Risk prediction and clinical outcome association"
+                "Evaluate DOAC level exposure - Bariatric surgery",
+                "Evaluate DOAC level exposure - Drug-DOAC interaction",
+                "Evaluate DOAC level exposure - Chronic kidney failure",
+                "Evaluate DOAC level exposure - Obesity",
+                "Evaluate DOAC level exposure - Residual DOAC level after elective interruption",
+                "Identify predictors of DOAC level exposure - Cmax, Ctrough, AUC",
+                "Guide clinical decision-making - Urgent surgery",
+                "Guide clinical decision-making - Major bleeding and reversal agent administration",
+                "Guide clinical decision-making - Thrombolysis",
+                "Guide clinical decision-making - Guide dose adjustment",
+                "Measure correlation with other laboratory techniques - Conventional coagulation testing (e.g., prothrombin time)",
+                "Measure correlation with other laboratory techniques - HPLC-MS vs calibrated anti-Xa measurement",
+                "Risk prediction and clinical outcome association - Bleeding",
+                "Risk prediction and clinical outcome association - Thrombosis"
             ]
         ]
     ] = Field(
-        default=None,
-        alias="Indications for DOAC Level Measurement",
-        description="Primary reasons researchers measured DOAC levels in the study."
+        default=None, alias="Indications for DOAC Level Measurement",
+        description=(
+            "Flattened list of explicit reasons DOAC levels were measured in this study’s population. "
+            "Include only if the manuscript explicitly states this purpose (not Background/Discussion only)."
+        )
     )
-    
-    exposure_contexts: Optional[
-        List[
-            Literal[
-                "Bariatric surgery",
-                "Drug-DOAC interaction",
-                "Chronic kidney failure",
-                "Obesity",
-                "Residual DOAC level after elective interruption",
-                "Conventional coagulation testing (e.g., prothrombin time)",
-                "HPLC-MS vs calibrated anti-Xa measurement",
-                "Bleeding",
-                "Thrombosis"
-            ]
-        ]
-    ] = Field(
-        default=None,
-        alias="DOAC Level Exposure Contexts",
-        description="Specific contexts or conditions related to DOAC level evaluation."
-    )
-    
-    ######################################### Methodology ###########################################
-    stratified_by: Optional[
-        List[
-            Literal[
-                "Apixaban",
-                "Rivaroxaban",
-                "Edoxaban",
-                "Betrixaban",
-                "Dabigatran"
-            ]
-        ]
-    ] = Field(
-        default=None,
-        alias="DOAC Level Measurement - Stratified by",
-        description="List of DOACs for which level measurements were stratified."
+    indications_for_doac_level_measurement_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Indications for DOAC Level Measurement Sentence from Text",
+        description="Exact sentences with the indications."
     )
 
-    measurement_methodology: Optional[
+    model_config = ConfigDict(populate_by_name=True)
+
+
+# ------------------------------------
+# 3) Methods & Assays Blocks
+# ------------------------------------
+class ExtractionMethods(BaseModel):
+    """
+    Guidelines:
+    1) Do not infer or guess. 2) Use null if unsure.
+    3) Output only facts explicitly in the PDF.
+    4) If ambiguous, set null (do not guess).
+    5) Numeric values must be exact.
+    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    7) Do not use external knowledge.
+    8) Ignore References and Acknowledgments content.
+    """
+    # DOAC level measurement
+    doac_level_measurement: Optional[
         List[
             Literal[
-                "HPLC-MS (ng/mL)",
-                "Calibrated anti-Xa level (ng/mL or IU/mL)",
-                "Ecarin chromogenic assay",
-                "Ecarin clotting time (ECT)",
-                "Thrombin time (TT)",
-                "Dilute thrombin time (dTT)"
+                # Apixaban
+                "Apixaban - HPLC-MS (ng/mL)",
+                "Apixaban - Calibrated anti-Xa level (ng/mL)",
+                "Apixaban - Heparin (UFH/LMWH) anti-Xa level (IU/mL)",
+
+                # Rivaroxaban
+                "Rivaroxaban - HPLC-MS (ng/mL)",
+                "Rivaroxaban - Calibrated anti-Xa level (ng/mL)",
+                "Rivaroxaban - Heparin (UFH/LMWH) anti-Xa level (IU/mL)",
+
+                # Edoxaban
+                "Edoxaban - HPLC-MS (ng/mL)",
+                "Edoxaban - Calibrated anti-Xa level (ng/mL)",
+                "Edoxaban - Heparin (UFH/LMWH) anti-Xa level (IU/mL)",
+
+                # Betrixaban
+                "Betrixaban - HPLC-MS (ng/mL)",
+                "Betrixaban - Calibrated anti-Xa level (ng/mL)",
+                "Betrixaban - Heparin (UFH/LMWH) anti-Xa level (IU/mL)",
+
+                # Dabigatran
+                "Dabigatran - Thrombin Time (TT)",
+                "Dabigatran - Dilute Thrombin Time (dTT)",
+                "Dabigatran - Ecarin Clotting Time (ECT)",
+                "Dabigatran - Ecarin Chromogenic Assay (ECA)",
             ]
         ]
     ] = Field(
         default=None,
-        alias="DOAC Level Measurement - Methodology",
-        description="Analytical methods used for measuring DOAC levels."
-    )
-    
-    ######################################### Reagent Selection ###########################################
-    reagent_selection: Optional[List[str]] = Field(
-        default=None,
-        alias="DOAC Level Measurement 1",
+        alias="DOAC Level Measurement",
         description=(
-            "Narrative synthesis outlining the reagent systems (brand names) used "
-            "for DOAC level measurement, e.g., Stago’s STA-Liquid Anti-Xa, STA-Apixaban calibrator, etc."
+            "Flattened list of specific analytical DOAC level measurement methodology, "
+            "each entry combines DOAC + method."
         )
     )
+    doac_level_measurement_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="DOAC Level Measurement Sentence from Text",
+        description="Exact sentences with the DOAC level measurement."
+    )
     
-    ######################################### Pre-analytical Variables ###########################################
-    pre_analytical_variables: Optional[List[str]] = Field(
+    # Reagent Selection
+    reagent_selection: Optional[List[str]] = Field( 
+        default=None, alias="Reagent Selection", 
+        description=( 
+            "Narrative synthesis outlining the reagent systems (brand names) used " 
+            "for DOAC level measurement, e.g., Stago’s STA-Liquid Anti-Xa, STA-Apixaban calibrator, etc." 
+        ) 
+    )
+    
+    # Pre-Analytical Variables
+    pre_analytical_variables: Optional[
+        List[
+            Literal[
+                "Blood collection procedures",
+                "Collection tube type",
+                "Centrifugation speed",
+                "Storage temperature"
+            ]
+        ]
+    ] = Field(
         default=None,
-        alias="DOAC Level Measurement 2",
+        alias="Pre-Analytical Variables",
         description=(
-            "Narrative synthesis of pre-analytical variables and assay conditions used "
-            "for DOAC level measurement, e.g., blood collection procedures, "
-            "collection tube types, centrifugation speed, and storage temperature."
+            "Pre-analytical variables actually applied to DOAC level measurement in this study "
+            "(not background examples). Include only if used for the specimens measured.\n"
+            "Examples:\n"
+            "• Blood collection procedures → needle gauge / tourniquet\n"
+            "• Collection tube type → e.g., 2.7% citrate BD\n"
+            "• Centrifugation speed → e.g., 1500g\n"
+            "• Storage temperature → e.g., -80°C"
         )
     )
-    blood_collection_procedure: Optional[str] = Field(
-        default=None,
-        description="Details on blood collection method, such as needle gauge or tourniquet technique."
+    pre_analytical_variables_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Pre-Analytical Variables Sentence from Text",
+        description="Exact sentences with the pre-analytical variables."
     )
-    collection_tube_type: Optional[str] = Field(
-        default=None,
-        description="Type of collection tube used, e.g., 2.7% citrate Becton Dickinson."
-    )
-    centrifugation_speed: Optional[str] = Field(
-        default=None,
-        description="Centrifugation speed or protocol used before assay."
-    )
-    storage_temperature: Optional[str] = Field(
-        default=None,
-        description="Storage temperature for samples, e.g., -80°C."
-    )
-    
-    ######################################### Coagulation Testing ###########################################
-    tests_performed: Optional[
+
+
+    # Conventional Coagulation Tests Concurrently Reported
+    coagulation_tests_concurrent: Optional[
         List[
             Literal[
                 "Prothrombin time (PT)",
-                "Activated partial thromboplastin time (aPTT)",
-                "Thrombin time (TT)"
+                "Activated partial thromboplastin time (aPTT)"
             ]
         ]
     ] = Field(
         default=None,
-        alias="Coagulation Testing",
-        description="Coagulation tests performed overall and/or stratified by each DOAC."
+        alias="Conventional Coagulation Tests Concurrently Reported",
+        description=(
+            "Conventional coagulation assays (PT, aPTT) that were reported together with "
+            "DOAC level measurement in this study. Include only if used for the specimens measured."
+        )
     )
-    stratified_by_doac: Optional[List[str]] = Field(
-        default=None,
-        description="List of DOACs for which coagulation testing results were stratified, e.g., apixaban, rivaroxaban, dabigatran."
+    coagulation_tests_concurrent_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Conventional Coagulation Tests Concurrently Reported Sentence from Text",
+        description="Exact sentences with the conventional coagulation tests concurrently reported."
     )
     
-    ######################################### Timing of Measurement ###########################################
+    
+    # Global Coagulation Testing
+    global_coagulation_tests: Optional[
+        List[
+            Literal[
+                "Viscoelastic testing (ROTEM/TEG)",
+                "Thrombin Generation Assay (TGA)"
+            ]
+        ]
+    ] = Field(
+        default=None,
+        alias="Global Coagulation Testing",
+        description="Global coagulation assays reported in addition to DOAC level testing. Include only if used for the specimens measured."
+    )
+    global_coagulation_tests_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Global Coagulation Testing Sentence from Text",
+        description="Exact sentences with the global coagulation tests."
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+# ------------------------------------
+# 4) Outcomes Blocks
+# ------------------------------------
+class ExtractionOutcomes(BaseModel):
+    """
+    Guidelines:
+    1) Do not infer or guess. 2) Use null if unsure.
+    3) Output only facts explicitly in the PDF.
+    4) If ambiguous, set null (do not guess).
+    5) Numeric values must be exact.
+    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    7) Do not use external knowledge.
+    8) Ignore References and Acknowledgments content.
+    """
+    # Timing of DOAC Level Measurement Relative to DOAC Intake
     timing_of_measurement: Optional[
         List[
             Literal[
-                "Peak level (2-4 hours post-dose)",
+                "Peak level (2–4 hours post-dose)",
                 "Trough level (just prior to next dose)",
                 "~11 hours post-dose for apixaban and dabigatran",
                 "~23 hours post-dose for rivaroxaban and edoxaban",
@@ -282,68 +358,24 @@ class ExtractionPayload(BaseModel):
     ] = Field(
         default=None,
         alias="Timing of DOAC level measurement relative to DOAC intake",
-        description="Reported timing of DOAC level measurement relative to dose administration."
+        description="Categorical timing of DOAC level sampling relative to DOAC intake."
     )
-    
-    ######################################### Dosing Regimen ###########################################
-    dosing_regimen_peak: Optional[
-        List[
-            Literal[
-                # Apixaban
-                "10 mg po BID",
-                "5 mg po BID",
-                "2.5 mg po BID",
-                # Rivaroxaban
-                "15 mg po BID",
-                "20 mg po OD",
-                "15 mg po OD",
-                "10 mg po OD",
-                "2.5 mg po BID",
-                # Edoxaban
-                "60 mg po OD",
-                "30 mg po OD",
-                "15 mg po OD",
-                # Dabigatran
-                "150 mg po BID",
-                "110 mg po BID"
-            ]
-        ]
-    ] = Field(
-        default=None,
-        alias="Peak DOAC Level Result (measured 2-4 hours post-dose)",
-        description="Dosing regimen associated with the measured DOAC peak level (2–4 hours post-dose)."
-    )
-    
-    dosing_regimen_trough: Optional[
-        List[
-            Literal[
-                # Apixaban
-                "10 mg po BID",
-                "5 mg po BID",
-                "2.5 mg po BID",
-                # Rivaroxaban
-                "15 mg po BID",
-                "20 mg po OD",
-                "15 mg po OD",
-                "10 mg po OD",
-                "2.5 mg po BID",
-                # Edoxaban
-                "60 mg po OD",
-                "30 mg po OD",
-                "15 mg po OD",
-                # Dabigatran
-                "150 mg po BID",
-                "110 mg po BID"
-            ]
-        ]
-    ] = Field(
-        default=None,
-        alias = "Trough DOAC Level Result (measured just prior to next dose)",
-        description="Dosing regimen associated with the measured DOAC trough level (just prior to next dose)."
+    timing_of_measurement_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Timing of DOAC Level Measurement Relative to DOAC Intake Sentence from Text",
+        description="Exact sentences with the timing of DOAC level measurement relative to DOAC intake."
     )
 
-    ######################################### Thresholds ###########################################
-    thresholds: Optional[
+    # Timing (hours since last dose)
+    timing_relative_to_last_dose_hours: Optional[str] = Field(
+        default=None,
+        alias="Timing (hours since last dose)",
+        description="If reported numerically: hours since last dose (e.g., median [IQR] or mean ± SD)."
+    )
+    
+    
+    
+    # A) thresholds the paper LISTS anywhere in its methods/results
+    thresholds_listed: Optional[
         List[
             Literal[
                 "30 ng/mL",
@@ -355,22 +387,76 @@ class ExtractionPayload(BaseModel):
         ]
     ] = Field(
         default=None,
-        alias="Reported DOAC concentration thresholds/cutoffs",
-        description="Reported DOAC concentration thresholds or cutoffs, overall and stratified by indication for DOAC level testing."
+        alias="Reported DOAC concentration thresholds/cutoffs (listed)",
+        description=(
+            "Thresholds/cutoffs explicitly listed by the study (methods/results). "
+            "Include only if stated for this study (not background)."
+        )
+    )
+    
+    # B) thresholds USED to inform CLINICAL MANAGEMENT, flattened as threshold × context
+    thresholds_used_for_management: Optional[
+        List[
+            Literal[
+                # 30
+                "30 ng/mL – Overall",
+                "30 ng/mL – Elective surgery",
+                "30 ng/mL – Emergency surgery",
+                "30 ng/mL – Major bleeding and anticoagulation reversal",
+                "30 ng/mL – Thrombolysis/acute stroke",
+                # 50
+                "50 ng/mL – Overall",
+                "50 ng/mL – Elective surgery",
+                "50 ng/mL – Emergency surgery",
+                "50 ng/mL – Major bleeding and anticoagulation reversal",
+                "50 ng/mL – Thrombolysis/acute stroke",
+                # 75
+                "75 ng/mL – Overall",
+                "75 ng/mL – Elective surgery",
+                "75 ng/mL – Emergency surgery",
+                "75 ng/mL – Major bleeding and anticoagulation reversal",
+                "75 ng/mL – Thrombolysis/acute stroke",
+                # 100
+                "100 ng/mL – Overall",
+                "100 ng/mL – Elective surgery",
+                "100 ng/mL – Emergency surgery",
+                "100 ng/mL – Major bleeding and anticoagulation reversal",
+                "100 ng/mL – Thrombolysis/acute stroke",
+                # Other
+                "Other – Overall",
+                "Other – Elective surgery",
+                "Other – Emergency surgery",
+                "Other – Major bleeding and anticoagulation reversal",
+                "Other – Thrombolysis/acute stroke",
+            ]
+        ]
+    ] = Field(
+        default=None,
+        alias="Thresholds used to inform clinical management",
+        description=(
+            "Flattened list of threshold × context pairs explicitly used by the study to guide care. "
+            "Include only if the manuscript states the threshold was applied to clinical decisions."
+        )
+    )
+    thresholds_used_for_management_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Thresholds used to inform clinical management Sentence from Text",
+        description="Exact sentences with the thresholds used to inform clinical management."
     )
     
     
-    ######################################### Turnaround Time ###########################################
+    # Turnaround Time
     turnaround_time: Optional[str] = Field(
         default=None,
         alias="Reported turnaround time",
         description=(
-            "Study-defined turnaround time, typically measured as the duration "
-            "from sample receipt at the laboratory to release of result (e.g., '2 hours', 'within 24 hours')."
+            "Study-defined turnaround time for DOAC level reporting (e.g., time from "
+            "sample receipt at the laboratory to release of result). "
+            "Include only if clearly specified in this study’s Methods/Results."
         )
     )
     
-    ######################################### Clinical Outcomes ###########################################
+    
+    # Clinical Outcomes
     clinical_outcomes: Optional[
         List[
             Literal[
@@ -383,78 +469,46 @@ class ExtractionPayload(BaseModel):
         ]
     ] = Field(
         default=None,
-        alias="Reported Clinical Outcome Estimates",
-        description="Reported clinical outcome estimates observed or analyzed in the study."
+        alias="Clinical Outcomes",
+        description="Clinical outcomes explicitly reported in this study."
     )
-    
-    
-    ######################################### Associated Outcomes ###########################################
-    associated_outcomes: Optional[
-        List[
-            Literal[
-                "Bleeding/Hemostasis",
-                "Thromboembolism",
-                "Stroke/Transient Ischemic Attack (TIA)",
-                "Pulmonary embolism (PE)",
-                "Deep venous thrombosis (DVT)"
-            ]
-        ]
-    ] = Field(
-        default=None,
-        alias="Associations Between DOAC Levels and Clinical Outcomes",
-        description=(
-            "Reported associations between DOAC concentration levels and specific clinical outcomes, "
-            "such as bleeding, thrombosis, or thromboembolic events."
-        )
-    )
-    
-    ######################################### Assay Types ###########################################
-    assay_types: Optional[
-        List[
-            Literal[
-                "Coagulation testing",
-                "Anti-Xa assays with LMWH calibrators (IU/mL)",
-                "Viscoelastic testing",
-                "Thrombin generation assays"
-            ]
-        ]
-    ] = Field(
-        default=None,
-        alias="Diagnostic Performance of Comparator Assays",
-        description="Main categories of diagnostic comparator assays evaluated in the study."
+    clinical_outcomes_sentence_from_text: Optional[List[str]] = Field(
+        default=None, alias="Clinical Outcomes Sentence from Text",
+        description="Exact sentences with the clinical outcomes."
     )
 
-    coagulation_subtests: Optional[
-        List[
-            Literal[
-                "Prothrombin time",
-                "Activated partial thromboplastin time",
-                "Dilute thrombin time",
-                "Thrombin time"
-            ]
-        ]
-    ] = Field(
+    # ---- Per-outcome follow-up duration (verbatim) ----
+    bleeding_followup_duration: Optional[str] = Field(
         default=None,
-        description="Specific coagulation subtests performed under the coagulation testing category."
+        alias="Bleeding/Hemostasis – follow-up duration",
+        description="Verbatim duration for bleeding/hemostasis outcome ascertainment (e.g., '30 days', '6 months', 'median 12 [6–24] months'). Only if explicitly reported."
+    )
+    stroke_tia_followup_duration: Optional[str] = Field(
+        default=None,
+        alias="Thromboembolism - Stroke/TIA - follow-up duration",
+        description="Verbatim duration for stroke/TIA outcome ascertainment. Only if explicitly reported."
+    )
+    pe_dvt_followup_duration: Optional[str] = Field(
+        default=None,
+        alias="Thromboembolism - PE/DVT - follow-up duration",
+        description="Verbatim duration for PE/DVT outcome ascertainment. Only if explicitly reported."
     )
 
-    performance_metrics: Optional[
-        List[
-            Literal[
-                "Sensitivity",
-                "Specificity",
-                "Positive predictive value",
-                "Negative predictive value"
-            ]
-        ]
-    ] = Field(
+    # ---- Per-outcome definition notes (verbatim) ----
+    bleeding_definition_note: Optional[str] = Field(
         default=None,
-        description=(
-            "Narrative synthesis of diagnostic test performance metrics reported "
-            "for each comparator assay (e.g., coagulation testing vs DOAC level, "
-            "LMWH-calibrated anti-Xa assay)."
-        )
+        alias="Bleeding/Hemostasis - definition note",
+        description="Outcome definition as stated (e.g., 'ISTH major/minor', 'BARC 2–5', or 'not defined'). Verbatim/concise."
     )
-            
-    # allow population by field name or alias
+    stroke_tia_definition_note: Optional[str] = Field(
+        default=None,
+        alias="Thromboembolism - Stroke/TIA - definition note",
+        description="Outcome definition as stated (e.g., criteria used or 'not defined'). Verbatim/concise."
+    )
+    pe_dvt_definition_note: Optional[str] = Field(
+        default=None,
+        alias="Thromboembolism - PE/DVT - definition note",
+        description="Outcome definition as stated (e.g., 'imaging-confirmed', specific criteria, or 'not defined'). Verbatim/concise."
+    )
+    
     model_config = ConfigDict(populate_by_name=True)
