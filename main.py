@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
-# from tqdm import tqdm
 from alive_progress import alive_bar
 
 from mistralai import Mistral
@@ -22,7 +21,7 @@ FINAL_OUTPUT_DIR = OUTPUT_DIR / "aggregated"
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 FINAL_OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
-MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "4"))
+MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "3"))
 MAX_PAGES_PER_REQ = 8
 IMAGE_ANNOTATION = True
 OVERWRITE_MD = True
@@ -102,32 +101,33 @@ async def amain():
     if not api_key:
         raise RuntimeError("MISTRAL_API_KEY is not set")
 
-    client = Mistral(api_key=api_key)
+    async with Mistral(api_key=api_key) as client:
+        list_of_pdfs = list(Path("papers").glob("*.pdf"))
+        if not list_of_pdfs:
+            print("[ERROR] No PDFs found in ./papers")
+            return
+        print(f"[INFO] Processing {len(list_of_pdfs)} PDFs with image annotation: {IMAGE_ANNOTATION}")
+        
+        sem = asyncio.Semaphore(MAX_CONCURRENCY)
+        start_time = time()
 
-    list_of_pdfs = list(Path("papers").glob("*.pdf"))
-    if not list_of_pdfs:
-        print("No PDFs found in ./papers")
-        return
-    print(f"Processing {len(list_of_pdfs)} PDFs with image annotation: {IMAGE_ANNOTATION}")
-    
-    sem = asyncio.Semaphore(MAX_CONCURRENCY)
-    start_time = time()
+        # launch all tasks
+        tasks = [process_one_pdf(p, client, sem, image_annotation=IMAGE_ANNOTATION) for p in list_of_pdfs]
 
-    # launch all tasks
-    tasks = [process_one_pdf(p, client, sem, image_annotation=IMAGE_ANNOTATION) for p in list_of_pdfs]
-
-    rows = []
-    # progress over as_completed to keep tqdm responsive
-    with alive_bar(len(tasks), title="Processing PDFs") as bar:
-        for fut in asyncio.as_completed(tasks):
-            result = await fut
-            if result is not None:
-                rows.append(result)
-            bar()
+        rows = []
+        # progress over as_completed to keep alive_bar responsive
+        with alive_bar(len(tasks), title="Processing PDFs") as bar:
+            for fut in asyncio.as_completed(tasks):
+                result = await fut
+                if result is not None:
+                    rows.append(result)
+                bar()
 
     # build & save dataframe
     if rows:
         df_annotations = pd.DataFrame(rows)
+        if "__chunk_start__" in df_annotations.columns:
+            df_annotations = df_annotations.drop(columns=["__chunk_start__"])
         csv_path = FINAL_OUTPUT_DIR / "df_annotations.csv"
         parquet_path = FINAL_OUTPUT_DIR / "df_annotations.parquet"
 
@@ -137,12 +137,12 @@ async def amain():
         except Exception as e:
             print(f"[WARN] Parquet save failed: {e}")
 
-        print(f"Saved {len(df_annotations)} rows to: {csv_path}")
+        print(f"[INFO] Saved {len(df_annotations)} rows to: {csv_path}")
     else:
-        print("No successful rows to save.")
+        print("[WARN] No successful rows to save.")
 
     end_time = time()
-    print(f"Time taken: {end_time - start_time:.2f} seconds")
+    print(f"[INFO] Time taken: {end_time - start_time:.2f} seconds")
 
 if __name__ == "__main__":
     asyncio.run(amain())

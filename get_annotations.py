@@ -31,7 +31,8 @@ def _get_annotation_sync(
     model_name: str = "mistral-ocr-latest",
 ) -> OCRResponse:
     if not pages:
-        raise RuntimeError("OCR called with empty pages")
+        print("[WARN] OCR called with empty pages. Skipping.")
+        return None
 
     kwargs = {
         "model": model_name,
@@ -53,7 +54,7 @@ def _get_annotation_sync(
     try:
         return client.ocr.process(**kwargs)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"[ERROR] Error in OCR: {e}")
         return None
 
 
@@ -72,7 +73,7 @@ async def get_annotation_async(
     )
 
 
-# ---------------- convenience: run all three schemas ----------------
+# ---------------- convenience: run all payload schemas ----------------
 
 async def run_all_payloads(
     client: Mistral,
@@ -82,8 +83,8 @@ async def run_all_payloads(
     model_name: str = "mistral-ocr-latest",
 ) -> Dict[str, Any]:
     """
-    Executes OCR three times with smaller schemas and merges the
-    three document_annotation JSON objects into one flat dict.
+    Executes OCR with all payload schemas and merges the
+    document_annotation JSON objects into one flat dict.
     """
     payload_classes: List[Type[BaseModel]] = [
         ExtractionMetaDesign,
@@ -92,7 +93,6 @@ async def run_all_payloads(
         ExtractionOutcomes,
     ]
 
-    resp_all = None
     merged: Dict[str, Any] = {}
     for cls in payload_classes:
         resp: OCRResponse = await get_annotation_async(
