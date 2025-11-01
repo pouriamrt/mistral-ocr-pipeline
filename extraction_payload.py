@@ -14,6 +14,17 @@ class Image(BaseModel):
     
 
 class ExtractionPayload(BaseModel):
+    """
+    Global guidelines for the whole extraction:
+    "1) do not infer or guess."
+    "2) "null" is correct if unsure."
+    "3) only output info that is explicitly in the PDF."
+    "4) if ambiguous or unclear, set field null, do not guess."
+    "5) numeric values must be exact."
+    "6) if conflicting values appear in different pages, choose the one most clearly stated (title → early pages; patient counts → methods/results)."
+    "7) do not hallucinate text or cite external knowledge."
+    "8) IGNORE the information in the References and Acknowledgments sections and items in them."
+    """
     ######################################### Journal and Author information #########################################
     journal: Optional[str] = Field(
         default=None,
@@ -69,6 +80,11 @@ class ExtractionPayload(BaseModel):
         default=None,
         alias="Patient Population",
         description="Total number of patients included in the study."
+    )
+    total_patients_sentence_from_text: Optional[str] = Field(
+        default=None,
+        alias="Patient Population Sentence from Text",
+        description="Sentence from the text that contains the total number of patients included in the study."
     )
     
     doacs_included: Optional[

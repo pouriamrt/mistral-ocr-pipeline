@@ -16,5 +16,6 @@ dependencies = [
     "pyarrow>=21.0.0",
     "pypdf[crypto]>=6.1.1",
     "seaborn>=0.13.2",
+    "tenacity>=9.1.2",
     "tqdm>=4.67.1",
 ]

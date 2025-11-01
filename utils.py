@@ -5,6 +5,13 @@ from collections.abc import Mapping
 from typing import Any, Dict, Iterable
 from pypdf import PdfReader
 import asyncio
+import re
+
+
+REF_HEADER_RE = re.compile(
+    r"(?i)^\s*(references?|bibliography|works\s+cited)\s*:?\s*$",
+    re.MULTILINE,
+)
 
 async def encode_pdf(pdf_path: str) -> str | None:
     """Asynchronously encode a PDF file to base64."""
@@ -26,17 +33,30 @@ async def encode_pdf(pdf_path: str) -> str | None:
 
 
 async def get_pdf_page_count(path: str) -> int:
-    def _count() -> int:
+    def _count():
         with open(path, "rb") as f:
             reader = PdfReader(f)
+            for i, page in enumerate(reader.pages):
+                try:
+                    txt = page.extract_text() or ""
+                except:
+                    txt = ""
+                if REF_HEADER_RE.search(txt):
+                    return i
             return len(reader.pages)
+
     return await asyncio.to_thread(_count)
 
-async def _is_empty(v: Any) -> bool:
-    return v in (None, "", [], {})
-
 async def _merge_values_async(a: Any, b: Any) -> Any:
-    if await _is_empty(a):
+    def _normalize_str(x):
+        return x.strip() if isinstance(x, str) else x
+    
+    def _is_empty(v: Any) -> bool:
+        return v in (None, "", [], {})
+    
+    a = _normalize_str(a)
+    b = _normalize_str(b)
+    if _is_empty(a):
         return b
     if isinstance(a, list) and isinstance(b, list):
         seen = set()

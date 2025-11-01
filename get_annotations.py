@@ -3,7 +3,10 @@ from mistralai import Mistral
 from mistralai.extra import response_format_from_pydantic_model
 from mistralai.models import OCRResponse
 from extraction_payload import Image, ExtractionPayload
+from tenacity import retry, stop_after_attempt, wait_exponential
 
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=15))
 def _get_annotation_sync(client: Mistral, base64_pdf: str, pages: list[int], image_annotation: bool = False) -> OCRResponse:
     if image_annotation is True:
         return client.ocr.process(
