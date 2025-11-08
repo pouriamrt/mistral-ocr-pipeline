@@ -136,7 +136,6 @@ class ParquetAppender:
         return False
 
     def append(self, row: dict):
-        # Convert to Arrow Table
         table = pa.Table.from_pandas(pd.DataFrame([row]), preserve_index=False)
         if self._writer is None:
             if self.parquet_path.exists():
@@ -165,6 +164,9 @@ def table_cast_like(table: pa.Table, target_schema: pa.schema) -> pa.Table:
         name = field.name
         if name in table.column_names:
             col = table[name]
+            if pa.types.is_null(field.type):
+                cols.append(pa.nulls(len(table), type=pa.null()))
+                continue
             # Try to cast if needed
             try:
                 col = col.cast(field.type)

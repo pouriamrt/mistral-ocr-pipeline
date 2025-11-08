@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Type, Optional, Dict, Any
+from typing import List, Type, Optional, Dict, Any, Tuple
 import json
 
 from pydantic import BaseModel
@@ -82,7 +82,7 @@ async def run_all_payloads(
     pages: List[int],
     image_annotation: bool = False,
     model_name: str = "mistral-ocr-latest",
-) -> Dict[str, Any]:
+) -> Tuple[Dict[str, Any], OCRResponse]:
     """
     Executes OCR with all payload schemas and merges the
     document_annotation JSON objects into one flat dict.
@@ -94,20 +94,28 @@ async def run_all_payloads(
         ExtractionOutcomes,
     ]
 
+    tasks = [
+        get_annotation_async(client, cls, base64_pdf, pages,
+                             image_annotation=image_annotation, model_name=model_name)
+        for cls in payload_classes
+    ]
+    responses: List[OCRResponse | None] = await asyncio.gather(*tasks, return_exceptions=False)
+
     merged: Dict[str, Any] = {}
-    for cls in payload_classes:
-        resp: OCRResponse = await get_annotation_async(
-            client, cls, base64_pdf, pages, image_annotation=image_annotation, model_name=model_name
-        )
-        
+    last_resp = None
+    for resp in responses:
+        if not resp:
+            continue
+        last_resp = resp
+
         resp_dict = json.loads(resp.model_dump_json())
-        doc_anno_str = resp_dict.get("document_annotation", "{}")
-        doc_anno: Dict[str, Any] = {}
-        try:
-            doc_anno = json.loads(doc_anno_str) if isinstance(doc_anno_str, str) else (doc_anno_str or {})
-        except Exception:
-            doc_anno = {}
-            
-        merged = await merge_multiple_dicts_async([merged, doc_anno])
-            
-    return merged, resp
+        doc_anno_obj = resp_dict.get("document_annotation") or {}
+        if isinstance(doc_anno_obj, str):
+            try:
+                doc_anno_obj = json.loads(doc_anno_obj)
+            except Exception:
+                doc_anno_obj = {}
+
+        merged = await merge_multiple_dicts_async([merged, doc_anno_obj])
+
+    return merged, last_resp

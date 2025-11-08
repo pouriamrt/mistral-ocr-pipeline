@@ -1,15 +1,12 @@
 import os
-import json
 import asyncio
 from time import time
 from pathlib import Path
 
-import pandas as pd
 from dotenv import load_dotenv
-from alive_progress import alive_bar
 from loguru import logger
 import sys
-
+from tqdm import tqdm
 from mistralai import Mistral
 
 from to_markdown import convert_to_markdown
@@ -25,7 +22,7 @@ FINAL_OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
 MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "3"))
 MAX_PAGES_PER_REQ = 8
-IMAGE_ANNOTATION = True
+IMAGE_ANNOTATION = False
 OVERWRITE_MD = True
 
 logger.remove()
@@ -82,7 +79,11 @@ async def process_one_pdf(pdf_path: Path, client: Mistral, sem: asyncio.Semaphor
         return None
     
     if pages <= MAX_PAGES_PER_REQ:
-        return await process_one_pdf_chunk(pdf_path, base64_pdf, client, sem, list(range(pages)), image_annotation)
+        result = await process_one_pdf_chunk(pdf_path, base64_pdf, client, sem, list(range(pages)), image_annotation)
+        result = {k: v for k, v in result.items() if k != "__chunk_start__"}
+        result["__source_file__"] = str(file_name_sha1(pdf_path.name))
+        return result
+    
 
     chunk_tasks = []
     for start in range(0, pages, MAX_PAGES_PER_REQ):
@@ -104,7 +105,7 @@ async def process_one_pdf(pdf_path: Path, client: Mistral, sem: asyncio.Semaphor
     rows = [{k: v for k, v in d.items() if k != "__chunk_start__"} for d in chunk_results]
 
     merged = await merge_multiple_dicts_async(rows)
-    merged["__source_file__"] = file_name_sha1(pdf_path.name)
+    merged["__source_file__"] = str(file_name_sha1(pdf_path.name))
     return merged
         
 
@@ -121,7 +122,7 @@ async def amain():
         already_processed = load_existing_index(csv_path) if not OVERWRITE_MD else set()
 
         async with Mistral(api_key=api_key) as client:
-            list_of_pdfs = list(Path("papers").glob("*.pdf"))
+            list_of_pdfs = list(Path("papers").glob("*.pdf"))[:5]
             if not list_of_pdfs:
                 logger.error("No PDFs found in ./papers")
                 return
@@ -141,20 +142,17 @@ async def amain():
 
             row_count = 0
             with ParquetAppender(parquet_path) as pw:
-                with alive_bar(len(tasks), title="Processing PDFs") as bar:
-                    for fut in asyncio.as_completed(tasks):
-                        result = await fut
-                        if result is not None:
-                            # offload the blocking disk writes
-                            await asyncio.to_thread(append_csv_row, csv_path, result)
-                            await asyncio.to_thread(pw.append, result)
+                for fut in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Processing PDFs"):
+                    result = await fut
+                    if result is not None:
+                        # offload the blocking disk writes
+                        await asyncio.to_thread(append_csv_row, csv_path, result)
+                        await asyncio.to_thread(pw.append, result)
 
-                            row_count += 1
-                            logger.debug(f"row appended ({row_count}) -> {result.get('__source_file__')}")
-                        else:
-                            logger.debug("Skipped a PDF because it returned None")
-
-                        bar()
+                        row_count += 1
+                        logger.debug(f"row appended ({row_count}) -> {result.get('__source_file__')}")
+                    else:
+                        logger.debug("Skipped a PDF because it returned None")
 
         logger.info(f"Saved {row_count} rows to {parquet_path} and {csv_path}")
         logger.info(f"Time taken: {time() - start_time:.2f} seconds")
