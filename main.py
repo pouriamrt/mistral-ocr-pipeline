@@ -14,7 +14,7 @@ from mistralai import Mistral
 
 from to_markdown import convert_to_markdown
 from get_annotations import run_all_payloads 
-from utils import encode_pdf, get_pdf_page_count, merge_multiple_dicts_async
+from utils import encode_pdf, get_pdf_page_count, merge_multiple_dicts_async, file_name_sha1, load_existing_index, append_csv_row, ParquetAppender
 
 load_dotenv(override=True)
 
@@ -103,56 +103,65 @@ async def process_one_pdf(pdf_path: Path, client: Mistral, sem: asyncio.Semaphor
     # strip helper key
     rows = [{k: v for k, v in d.items() if k != "__chunk_start__"} for d in chunk_results]
 
-    return await merge_multiple_dicts_async(rows)
+    merged = await merge_multiple_dicts_async(rows)
+    merged["__source_file__"] = file_name_sha1(pdf_path.name)
+    return merged
         
 
 async def amain():
-    api_key = os.getenv("MISTRAL_API_KEY")
-    if not api_key:
-        raise RuntimeError("MISTRAL_API_KEY is not set")
-
-    async with Mistral(api_key=api_key) as client:
-        list_of_pdfs = list(Path("papers").glob("*.pdf"))
-        if not list_of_pdfs:
-            logger.error("No PDFs found in ./papers")
-            return
-        logger.info(f"Processing {len(list_of_pdfs)} PDFs with image annotation: {IMAGE_ANNOTATION}")
+    try:
+        api_key = os.getenv("MISTRAL_API_KEY")
+        if not api_key:
+            raise RuntimeError("MISTRAL_API_KEY is not set")
         
-        sem = asyncio.Semaphore(MAX_CONCURRENCY)
-        start_time = time()
-
-        # launch all tasks
-        tasks = [process_one_pdf(p, client, sem, image_annotation=IMAGE_ANNOTATION) for p in list_of_pdfs]
-
-        rows = []
-        # progress over as_completed to keep alive_bar responsive
-        with alive_bar(len(tasks), title="Processing PDFs") as bar:
-            for fut in asyncio.as_completed(tasks):
-                result = await fut
-                if result is not None:
-                    rows.append(result)
-                bar()
-
-    # build & save dataframe
-    if rows:
-        df_annotations = pd.DataFrame(rows)
-        if "__chunk_start__" in df_annotations.columns:
-            df_annotations = df_annotations.drop(columns=["__chunk_start__"])
         csv_path = FINAL_OUTPUT_DIR / "df_annotations.csv"
         parquet_path = FINAL_OUTPUT_DIR / "df_annotations.parquet"
+        
+        # Resume index: skip files that already exist in CSV if OVERWRITE_MD is False
+        already_processed = load_existing_index(csv_path) if not OVERWRITE_MD else set()
 
-        df_annotations.to_csv(csv_path, index=False)
-        try:
-            df_annotations.to_parquet(parquet_path, index=False)
-        except Exception as e:
-            logger.warning(f"Parquet save failed: {e}")
+        async with Mistral(api_key=api_key) as client:
+            list_of_pdfs = list(Path("papers").glob("*.pdf"))
+            if not list_of_pdfs:
+                logger.error("No PDFs found in ./papers")
+                return
+            
+            todo = [p for p in list_of_pdfs if (file_name_sha1(p.name) not in already_processed)]
+            skipped = len(list_of_pdfs) - len(todo)
+            if skipped:
+                logger.info(f"Resume mode: skipping {skipped} already-processed PDFs (OVERWRITE_MD={OVERWRITE_MD}).")
 
-        logger.info(f"Saved {len(df_annotations)} rows to: {csv_path}")
-    else:
-        logger.warning("No successful rows to save.")
+            logger.info(f"Processing {len(todo)} PDFs with image annotation: {IMAGE_ANNOTATION}")
+            
+            sem = asyncio.Semaphore(MAX_CONCURRENCY)
+            start_time = time()
 
-    end_time = time()
-    logger.info(f"Time taken: {end_time - start_time:.2f} seconds")
+            # launch all tasks
+            tasks = [process_one_pdf(p, client, sem, image_annotation=IMAGE_ANNOTATION) for p in todo]
+
+            row_count = 0
+            with ParquetAppender(parquet_path) as pw:
+                with alive_bar(len(tasks), title="Processing PDFs") as bar:
+                    for fut in asyncio.as_completed(tasks):
+                        result = await fut
+                        if result is not None:
+                            # offload the blocking disk writes
+                            await asyncio.to_thread(append_csv_row, csv_path, result)
+                            await asyncio.to_thread(pw.append, result)
+
+                            row_count += 1
+                            logger.debug(f"row appended ({row_count}) -> {result.get('__source_file__')}")
+                        else:
+                            logger.debug("Skipped a PDF because it returned None")
+
+                        bar()
+
+        logger.info(f"Saved {row_count} rows to {parquet_path} and {csv_path}")
+        logger.info(f"Time taken: {time() - start_time:.2f} seconds")
+        
+    except KeyboardInterrupt:
+        logger.error("Keyboard interrupt received. Exiting...")
+        sys.exit()
 
 if __name__ == "__main__":
     asyncio.run(amain())
