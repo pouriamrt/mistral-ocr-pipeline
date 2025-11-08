@@ -7,6 +7,8 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 from alive_progress import alive_bar
+from loguru import logger
+import sys
 
 from mistralai import Mistral
 
@@ -26,7 +28,16 @@ MAX_PAGES_PER_REQ = 8
 IMAGE_ANNOTATION = True
 OVERWRITE_MD = True
 
-async def process_one_pdf_chunk(pdf_path: Path, client: Mistral, sem: asyncio.Semaphore, pages_chunk: list[int], image_annotation: bool = False) -> dict | None:
+logger.remove()
+logger.add(sys.stderr, 
+           format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+           colorize=True,
+           level="INFO")
+logger.add("logs/pipeline.log", format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}", 
+           rotation="1 MB", retention="10 days", level="DEBUG",
+           enqueue=True, backtrace=True, diagnose=False)
+
+async def process_one_pdf_chunk(pdf_path: Path, base64_pdf: str, client: Mistral, sem: asyncio.Semaphore, pages_chunk: list[int], image_annotation: bool = False) -> dict | None:
     """Process a single PDF:
        - encode PDF
        - call OCR with annotations (offloaded)
@@ -35,34 +46,28 @@ async def process_one_pdf_chunk(pdf_path: Path, client: Mistral, sem: asyncio.Se
     """
     chunk_start = pages_chunk[0]
     async with sem:
-        # 1) encode PDF (blocking disk I/O)
-        base64_pdf = await encode_pdf(pdf_path)
-        if not base64_pdf:
-            print(f"[WARN] Skipping {pdf_path.name}: could not base64 encode.")
-            return None
-
-        # 2) OCR call (blocking network)
+        # 1) OCR call (blocking network)
         try:
             annotations_response, ocr_response = await run_all_payloads(client, base64_pdf, pages=pages_chunk, image_annotation=image_annotation)
         except Exception as e:
-            print(f"[ERROR] OCR failed for {pdf_path.name}: {e}")
+            logger.error(f"OCR failed for {pdf_path.name}: {e}")
             return None
 
-        # 3) Parse annotations -> dict row
+        # 2) Parse annotations -> dict row
         try:
             document_annotations = annotations_response
             row = {k: document_annotations.get(k) for k in document_annotations.keys()}
         except Exception as e:
-            print(f"[ERROR] Failed to parse annotations for {pdf_path.name}: {e}")
+            logger.error(f"Failed to parse annotations for {pdf_path.name}: {e}")
             row = None
 
-        # 4) Write markdown to file
+        # 3) Write markdown to file
         out_md = OUTPUT_DIR / f"{pdf_path.stem}_{int(min(pages_chunk)/MAX_PAGES_PER_REQ)}.md"
         if not Path(out_md).exists() or OVERWRITE_MD:
             try:
                 await asyncio.to_thread(convert_to_markdown, document_annotations, ocr_response, str(out_md))
             except Exception as e:
-                print(f"[ERROR] Writing markdown failed for {pdf_path.name}: {e}")
+                logger.error(f"Writing markdown failed for {pdf_path.name}: {e}")
 
         return {"__chunk_start__": chunk_start, **(row or {})}
 
@@ -71,14 +76,19 @@ async def process_one_pdf(pdf_path: Path, client: Mistral, sem: asyncio.Semaphor
     if pages <= 0:
         return None
     
+    base64_pdf = await encode_pdf(pdf_path)
+    if not base64_pdf:
+        logger.warning(f"Skipping {pdf_path.name}: could not base64 encode.")
+        return None
+    
     if pages <= MAX_PAGES_PER_REQ:
-        return await process_one_pdf_chunk(pdf_path, client, sem, list(range(pages)), image_annotation)
+        return await process_one_pdf_chunk(pdf_path, base64_pdf, client, sem, list(range(pages)), image_annotation)
 
     chunk_tasks = []
     for start in range(0, pages, MAX_PAGES_PER_REQ):
         end = min(start + MAX_PAGES_PER_REQ, pages)
         chunk_tasks.append(
-            process_one_pdf_chunk(pdf_path, client, sem, list(range(start, end)), image_annotation)
+            process_one_pdf_chunk(pdf_path, base64_pdf, client, sem, list(range(start, end)), image_annotation)
         )
 
     chunk_results = []
@@ -104,9 +114,9 @@ async def amain():
     async with Mistral(api_key=api_key) as client:
         list_of_pdfs = list(Path("papers").glob("*.pdf"))
         if not list_of_pdfs:
-            print("[ERROR] No PDFs found in ./papers")
+            logger.error("No PDFs found in ./papers")
             return
-        print(f"[INFO] Processing {len(list_of_pdfs)} PDFs with image annotation: {IMAGE_ANNOTATION}")
+        logger.info(f"Processing {len(list_of_pdfs)} PDFs with image annotation: {IMAGE_ANNOTATION}")
         
         sem = asyncio.Semaphore(MAX_CONCURRENCY)
         start_time = time()
@@ -135,14 +145,14 @@ async def amain():
         try:
             df_annotations.to_parquet(parquet_path, index=False)
         except Exception as e:
-            print(f"[WARN] Parquet save failed: {e}")
+            logger.warning(f"Parquet save failed: {e}")
 
-        print(f"[INFO] Saved {len(df_annotations)} rows to: {csv_path}")
+        logger.info(f"Saved {len(df_annotations)} rows to: {csv_path}")
     else:
-        print("[WARN] No successful rows to save.")
+        logger.warning("No successful rows to save.")
 
     end_time = time()
-    print(f"[INFO] Time taken: {end_time - start_time:.2f} seconds")
+    logger.info(f"Time taken: {end_time - start_time:.2f} seconds")
 
 if __name__ == "__main__":
     asyncio.run(amain())

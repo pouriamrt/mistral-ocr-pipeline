@@ -9,6 +9,7 @@ dependencies = [
     "alive-progress>=3.3.0",
     "dotenv>=0.9.9",
     "ipython>=9.6.0",
+    "loguru>=0.7.3",
     "matplotlib>=3.10.7",
     "mistralai>=1.9.11",
     "notebook>=7.4.7",

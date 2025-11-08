@@ -8,6 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from mistralai import Mistral
 from mistralai.extra import response_format_from_pydantic_model
 from mistralai.models import OCRResponse
+from loguru import logger
 
 from extraction_payload import (
     Image,
@@ -31,7 +32,7 @@ def _get_annotation_sync(
     model_name: str = "mistral-ocr-latest",
 ) -> OCRResponse:
     if not pages:
-        print("[WARN] OCR called with empty pages. Skipping.")
+        logger.warning("OCR called with empty pages. Skipping.")
         return None
 
     kwargs = {
@@ -54,7 +55,7 @@ def _get_annotation_sync(
     try:
         return client.ocr.process(**kwargs)
     except Exception as e:
-        print(f"[ERROR] Error in OCR: {e}")
+        logger.error(f"Error in OCR: {e}")
         return None
 
 

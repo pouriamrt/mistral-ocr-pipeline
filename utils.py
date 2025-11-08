@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterable
 from pypdf import PdfReader
 import asyncio
 import re
-
+from loguru import logger
 
 REF_HEADER_RE = re.compile(
     r"(?i)^\s*(references?|bibliography|works\s+cited)\s*:?\s*$",
@@ -17,7 +17,7 @@ async def encode_pdf(pdf_path: str) -> str | None:
     """Asynchronously encode a PDF file to base64."""
     try:
         if not os.path.exists(pdf_path):
-            print(f"[ERROR] The file {pdf_path} was not found.")
+            logger.error(f"The file {pdf_path} was not found.")
             return None
 
         async with aiofiles.open(pdf_path, "rb") as pdf_file:
@@ -25,10 +25,10 @@ async def encode_pdf(pdf_path: str) -> str | None:
             return base64.b64encode(data).decode("utf-8")
 
     except FileNotFoundError:
-        print(f"[ERROR] The file {pdf_path} was not found.")
+        logger.error(f"The file {pdf_path} was not found.")
         return None
     except Exception as e:
-        print(f"[ERROR] Error: {e}")
+        logger.error(f"Error: {e}")
         return None
 
 
