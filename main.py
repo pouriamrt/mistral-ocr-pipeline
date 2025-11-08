@@ -122,7 +122,7 @@ async def amain():
         already_processed = load_existing_index(csv_path) if not OVERWRITE_MD else set()
 
         async with Mistral(api_key=api_key) as client:
-            list_of_pdfs = list(Path("papers").glob("*.pdf"))[:5]
+            list_of_pdfs = list(Path("papers").glob("*.pdf"))
             if not list_of_pdfs:
                 logger.error("No PDFs found in ./papers")
                 return
