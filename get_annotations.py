@@ -3,7 +3,7 @@ from typing import List, Type, Optional, Dict, Any, Tuple
 import json
 
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 from mistralai import Mistral
 from mistralai.extra import response_format_from_pydantic_model
@@ -21,8 +21,12 @@ from extraction_payload import (
 from utils import merge_multiple_dicts_async
 
 # ---------------- core OCR call (sync) ----------------
+def _is_rate_limit(e: Exception) -> bool:
+    txt = str(e).lower()
+    code = getattr(e, "status_code", None)
+    return code == 429 or "rate" in txt or "quota" in txt or "too many requests" in txt
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=15))
+@retry(reraise=True, stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=40), retry=retry_if_exception(_is_rate_limit))
 def _get_annotation_sync(
     client: Mistral,
     payload_cls: Type[BaseModel],
