@@ -19,6 +19,26 @@ from extraction_payload import (
 )
 
 from utils import merge_multiple_dicts_async
+from time import monotonic
+import os
+
+# tokens per second; tune in .env (e.g., OCR_RPS=4 → max 4 requests/sec)
+_OCR_RPS = float(os.getenv("OCR_RPS", "4"))
+
+class _AsyncRateLimiter:
+    def __init__(self, rps: float):
+        self._interval = 1.0 / max(rps, 1e-6)
+        self._lock = asyncio.Lock()
+        self._last = 0.0
+    async def wait(self):
+        async with self._lock:
+            now = monotonic()
+            wait = max(0.0, self._last + self._interval - now)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last = monotonic()
+
+_rate_limiter = _AsyncRateLimiter(_OCR_RPS)
 
 # ---------------- core OCR call (sync) ----------------
 def _is_rate_limit(e: Exception) -> bool:
@@ -73,6 +93,7 @@ async def get_annotation_async(
     image_annotation: bool = False,
     model_name: str = "mistral-ocr-latest",
 ) -> OCRResponse:
+    await _rate_limiter.wait()
     return await asyncio.to_thread(
         _get_annotation_sync, client, payload_cls, base64_pdf, pages, image_annotation, model_name
     )

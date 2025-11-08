@@ -22,8 +22,8 @@ FINAL_OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
 MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "3"))
 MAX_PAGES_PER_REQ = 8
-IMAGE_ANNOTATION = False
-OVERWRITE_MD = True
+IMAGE_ANNOTATION = os.getenv("IMAGE_ANNOTATION", "False").lower() == "true"
+OVERWRITE_MD = os.getenv("OVERWRITE_MD", "True").lower() == "true"
 
 logger.remove()
 logger.add(sys.stderr, 
