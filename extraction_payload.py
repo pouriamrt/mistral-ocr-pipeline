@@ -1,5 +1,5 @@
 from typing import List, Optional, Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from enum import Enum
 
 class ImageType(str, Enum):
@@ -11,10 +11,6 @@ class ImageType(str, Enum):
 class Image(BaseModel):
     image_type: ImageType = Field(..., description="The type of the image. Must be one of 'graph', 'text', 'table' or 'image'.")
     description: str = Field(..., description="A description of the image.")
-    
-
-from typing import List, Optional, Literal
-from pydantic import BaseModel, Field, ConfigDict
 
 # -------------------------------
 # 1) Bibliography & Study Design
@@ -575,8 +571,8 @@ class ExtractionOutcomes(BaseModel):
             Literal[
                 "Peak level (2–4 hours post-dose)",
                 "Trough level (just prior to next dose)",
-                "~11 hours post-dose for apixaban and dabigatran",
-                "~23 hours post-dose for rivaroxaban and edoxaban",
+                "Trough level - ~11 hours post-dose for apixaban and dabigatran",
+                "Trough level - ~23 hours post-dose for rivaroxaban and edoxaban",
                 "Random level",
                 "Timing not reported"
             ]
@@ -584,8 +580,33 @@ class ExtractionOutcomes(BaseModel):
     ] = Field(
         default=None,
         alias="Timing of DOAC level measurement relative to DOAC intake",
-        description="Categorical timing of DOAC level sampling relative to DOAC intake."
+        description=(
+            "Timing category EXACTLY as stated in the study.\n\n"
+            "Interpretation rules:\n"
+            "• ‘Peak level’ = 2–4h post-dose.\n"
+            "• The ~11h (apixaban/dabigatran) and ~23h (rivaroxaban/edoxaban) literals are BOTH considered trough timing "
+            "and must not be placed under a separate category.\n"
+            "• ‘Random level’ = timing reported but unclear whether peak or trough.\n"
+            "• ‘Timing not reported’ = no timing provided in Methods/Results.\n\n"
+            "Select ALL that apply if a study measured multiple timepoints."
+        )
     )
+    @field_validator("timing_of_measurement", mode="after")
+    def _dedupe_trough_variants(cls, v):
+        if not v:
+            return v
+        s = set(v)
+        specific = {
+            "Trough level - ~11 hours post-dose for apixaban and dabigatran",
+            "Trough level - ~23 hours post-dose for rivaroxaban and edoxaban",
+        }
+        generic = "Trough level (just prior to next dose)"
+        # If any specific trough is present, drop the generic trough
+        if s & specific and generic in s:
+            s.remove(generic)
+        # Return in original order, filtered
+        return [x for x in v if x in s]
+    
     timing_of_measurement_sentence_from_text: Optional[List[str]] = Field(
         default=None, alias="Timing of DOAC Level Measurement Relative to DOAC Intake Sentence from Text",
         description="Exact sentences with the timing of DOAC level measurement relative to DOAC intake."

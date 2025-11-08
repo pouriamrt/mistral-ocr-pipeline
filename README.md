@@ -15,6 +15,7 @@ Outputs include **annotated Markdown** files and an **aggregated CSV/Parquet** o
 - 📝 **Markdown reports** with optional image annotations (base64 inlined)
 - 📊 **Aggregated outputs** in CSV and Parquet for downstream analysis
 - 🛡️ **Graceful error handling** with per-chunk resilience
+- 📝 **Logging** to `logs/pipeline.log` with `loguru`
 
 ---
 
@@ -41,6 +42,8 @@ Outputs include **annotated Markdown** files and an **aggregated CSV/Parquet** o
 │  └─ aggregated/               # (auto-created) final tabular outputs
 │     ├─ df_annotations.csv
 │     └─ df_annotations.parquet
+logs/                           # (auto-created) logs
+│     └─ pipeline.log 
 └─ README.md
 ```
 
@@ -163,6 +166,7 @@ python main.py
 - **Pydantic** — robust schema modeling  
 - **pandas / pyarrow** — analytics-ready outputs  
 - **pypdf** — fast PDF metadata access
+- **loguru** — logging
 
 ---
 
