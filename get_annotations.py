@@ -20,10 +20,9 @@ from extraction_payload import (
 
 from utils import merge_multiple_dicts_async
 from time import monotonic
-import os
 
 # tokens per second; tune in .env (e.g., OCR_RPS=4 → max 4 requests/sec)
-_OCR_RPS = float(os.getenv("OCR_RPS", "4"))
+_OCR_RPS = 5
 
 class _AsyncRateLimiter:
     def __init__(self, rps: float):
@@ -46,7 +45,7 @@ def _is_rate_limit(e: Exception) -> bool:
     code = getattr(e, "status_code", None)
     return code == 429 or "rate" in txt or "quota" in txt or "too many requests" in txt
 
-@retry(reraise=True, stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=40), retry=retry_if_exception(_is_rate_limit))
+@retry(reraise=True, stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=60), retry=retry_if_exception(_is_rate_limit))
 def _get_annotation_sync(
     client: Mistral,
     payload_cls: Type[BaseModel],
