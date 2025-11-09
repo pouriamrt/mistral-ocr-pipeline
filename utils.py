@@ -2,14 +2,13 @@ import base64
 import aiofiles
 import os
 from collections.abc import Mapping
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, List
 from pypdf import PdfReader
 import asyncio
 import re
 import hashlib
 from pathlib import Path
 from loguru import logger
-from datetime import datetime, timezone
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pyarrow.compute as pc
@@ -20,6 +19,7 @@ REF_HEADER_RE = re.compile(
     r"(?i)^\s*(references?|bibliography|works\s+cited)\s*:?\s*$",
     re.MULTILINE,
 )
+
 
 async def encode_pdf(pdf_path: str) -> str | None:
     """Asynchronously encode a PDF file to base64."""
@@ -47,7 +47,7 @@ async def get_pdf_page_count(path: str) -> int:
             for i, page in enumerate(reader.pages):
                 try:
                     txt = page.extract_text() or ""
-                except:
+                except Exception:
                     txt = ""
                 if REF_HEADER_RE.search(txt):
                     return i
@@ -55,13 +55,14 @@ async def get_pdf_page_count(path: str) -> int:
 
     return await asyncio.to_thread(_count)
 
+
 async def _merge_values_async(a: Any, b: Any) -> Any:
     def _normalize_str(x):
         return x.strip() if isinstance(x, str) else x
-    
+
     def _is_empty(v: Any) -> bool:
         return v in (None, "", [], {})
-    
+
     a = _normalize_str(a)
     b = _normalize_str(b)
     if _is_empty(a):
@@ -103,27 +104,21 @@ def file_name_sha1(name: str) -> str:
 
 
 # ---------- Realtime writers ----------
-def _normalize_record(record: dict, source_file: str) -> dict:
-    """Add tracking columns and ensure JSON-serializable types."""
-    rec = dict(record or {})
-    rec["__source_file__"] = source_file
-    rec["__processed_at__"] = datetime.now(timezone.utc).isoformat(timespec="seconds") + "Z"
-    return rec
-
-def append_csv_row(csv_path: Path, row: dict):
+def append_csv_row(csv_path: Path, row: dict, cols: List[str]):
     try:
         exists = csv_path.exists()
-        df = pd.DataFrame([row])
+        df = pd.DataFrame([row], columns=cols)
         df.to_csv(csv_path, mode="a", header=not exists, index=False)
     except Exception as e:
         logger.error(f"Error appending row to {csv_path}: {e}")
         raise e
 
+
 class ParquetAppender:
     """
     Incremental Parquet writer using pyarrow. Creates the writer lazily on first row.
-    Ensures schema stability. Call .close() at the end.
     """
+
     def __init__(self, parquet_path: Path):
         self.parquet_path = parquet_path
         self._writer = None
@@ -131,7 +126,7 @@ class ParquetAppender:
 
     def __enter__(self):
         return self
-    
+
     def __exit__(self, exc_type, exc_value, traceback):
         if self._writer is not None:
             self._writer.close()
@@ -146,15 +141,19 @@ class ParquetAppender:
                 self._schema = existing.schema
                 # Align new table to existing schema (add missing cols, order)
                 table = table_cast_like(table, self._schema)
-                self._writer = pq.ParquetWriter(self.parquet_path, self._schema, use_dictionary=True)
+                self._writer = pq.ParquetWriter(
+                    self.parquet_path, self._schema, use_dictionary=True
+                )
             else:
                 self._schema = table.schema
-                self._writer = pq.ParquetWriter(self.parquet_path, self._schema, use_dictionary=True)
+                self._writer = pq.ParquetWriter(
+                    self.parquet_path, self._schema, use_dictionary=True
+                )
         else:
             table = table_cast_like(table, self._schema)
 
         self._writer.write_table(table)
-        
+
     def drop_empty_rows_pq(self):
         """
         Arrow-native filter:
@@ -171,8 +170,7 @@ class ParquetAppender:
             mask_journal_keep = pc.is_null(j)
         elif pat.is_string(t) or pat.is_large_string(t):
             is_numeric_str = pc.match_substring_regex(
-                j,
-                r"^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?\s*$"
+                j, r"^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?\s*$"
             )
             mask_journal_keep = pc.or_(pc.is_null(j), pc.invert(is_numeric_str))
         else:
@@ -229,6 +227,7 @@ def load_existing_index(csv_path: Path) -> set[str]:
         logger.error(f"Error loading existing index from {csv_path}: {e}")
         return set()
 
+
 def drop_empty_rows(csv_path: Path):
     """
     Drop rows with:
@@ -237,11 +236,13 @@ def drop_empty_rows(csv_path: Path):
     """
     df = pd.read_csv(csv_path)
     df = df.dropna(subset=["__source_file__"])
+
     def is_numeric(x):
         try:
             float(str(x).strip())
             return True
-        except:
+        except Exception:
             return False
+
     df = df[~df["Journal"].apply(is_numeric)]
     df.to_csv(csv_path, index=False)

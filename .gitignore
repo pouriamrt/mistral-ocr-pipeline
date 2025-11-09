@@ -15,3 +15,4 @@ output/
 papers/
 # test.ipynb
 logs/
+.ruff_cache/

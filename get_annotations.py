@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Type, Optional, Dict, Any, Tuple
+from typing import List, Type, Dict, Any, Tuple
 import json
 
 from pydantic import BaseModel
@@ -12,10 +12,10 @@ from loguru import logger
 
 from extraction_payload import (
     Image,
-    ExtractionMetaDesign,               # class 1
-    ExtractionPopulationIndications,    # class 2
-    ExtractionMethods,                  # class 3
-    ExtractionOutcomes,                 # class 4
+    ExtractionMetaDesign,  # class 1
+    ExtractionPopulationIndications,  # class 2
+    ExtractionMethods,  # class 3
+    ExtractionOutcomes,  # class 4
 )
 
 from utils import merge_multiple_dicts_async
@@ -24,11 +24,13 @@ from time import monotonic
 # tokens per second; tune in .env (e.g., OCR_RPS=4 → max 4 requests/sec)
 _OCR_RPS = 5
 
+
 class _AsyncRateLimiter:
     def __init__(self, rps: float):
         self._interval = 1.0 / max(rps, 1e-6)
         self._lock = asyncio.Lock()
         self._last = 0.0
+
     async def wait(self):
         async with self._lock:
             now = monotonic()
@@ -37,7 +39,9 @@ class _AsyncRateLimiter:
                 await asyncio.sleep(wait)
             self._last = monotonic()
 
+
 _rate_limiter = _AsyncRateLimiter(_OCR_RPS)
+
 
 # ---------------- core OCR call (sync) ----------------
 def _is_rate_limit(e: Exception) -> bool:
@@ -45,7 +49,13 @@ def _is_rate_limit(e: Exception) -> bool:
     code = getattr(e, "status_code", None)
     return code == 429 or "rate" in txt or "quota" in txt or "too many requests" in txt
 
-@retry(reraise=True, stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=60), retry=retry_if_exception(_is_rate_limit))
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=4, max=60),
+    retry=retry_if_exception(_is_rate_limit),
+)
 def _get_annotation_sync(
     client: Mistral,
     payload_cls: Type[BaseModel],
@@ -86,6 +96,7 @@ def _get_annotation_sync(
 
 # ---------------- async thin wrapper ----------------
 
+
 async def get_annotation_async(
     client: Mistral,
     payload_cls: Type[BaseModel],
@@ -96,11 +107,18 @@ async def get_annotation_async(
 ) -> OCRResponse:
     await _rate_limiter.wait()
     return await asyncio.to_thread(
-        _get_annotation_sync, client, payload_cls, base64_pdf, pages, image_annotation, model_name
+        _get_annotation_sync,
+        client,
+        payload_cls,
+        base64_pdf,
+        pages,
+        image_annotation,
+        model_name,
     )
 
 
 # ---------------- convenience: run all payload schemas ----------------
+
 
 async def run_all_payloads(
     client: Mistral,
@@ -121,11 +139,19 @@ async def run_all_payloads(
     ]
 
     tasks = [
-        get_annotation_async(client, cls, base64_pdf, pages,
-                             image_annotation=image_annotation, model_name=model_name)
+        get_annotation_async(
+            client,
+            cls,
+            base64_pdf,
+            pages,
+            image_annotation=image_annotation,
+            model_name=model_name,
+        )
         for cls in payload_classes
     ]
-    responses: List[OCRResponse | None] = await asyncio.gather(*tasks, return_exceptions=False)
+    responses: List[OCRResponse | None] = await asyncio.gather(
+        *tasks, return_exceptions=False
+    )
 
     merged: Dict[str, Any] = {}
     last_resp = None
