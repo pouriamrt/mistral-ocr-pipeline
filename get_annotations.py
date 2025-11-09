@@ -52,7 +52,7 @@ def _is_rate_limit(e: Exception) -> bool:
 
 @retry(
     reraise=True,
-    stop=stop_after_attempt(5),
+    stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=60),
     retry=retry_if_exception(_is_rate_limit),
 )
