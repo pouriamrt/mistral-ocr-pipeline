@@ -78,6 +78,8 @@ def _get_annotation_sync(
     try:
         return client.ocr.process(**kwargs)
     except Exception as e:
+        if _is_rate_limit(e):
+            raise
         logger.error(f"Error in OCR: {e}")
         return None
 

@@ -12,6 +12,8 @@ from loguru import logger
 from datetime import datetime, timezone
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pyarrow.compute as pc
+from pyarrow import types as pat
 import pandas as pd
 
 REF_HEADER_RE = re.compile(
@@ -139,6 +141,7 @@ class ParquetAppender:
         table = pa.Table.from_pandas(pd.DataFrame([row]), preserve_index=False)
         if self._writer is None:
             if self.parquet_path.exists():
+                self.drop_empty_rows_pq()
                 existing = pq.read_table(self.parquet_path)
                 self._schema = existing.schema
                 # Align new table to existing schema (add missing cols, order)
@@ -151,6 +154,38 @@ class ParquetAppender:
             table = table_cast_like(table, self._schema)
 
         self._writer.write_table(table)
+        
+    def drop_empty_rows_pq(self):
+        """
+        Arrow-native filter:
+        - Keep rows where '__source_file__' is not null/empty.
+        - Drop rows where 'Journal' is numeric (int/float), or a numeric-looking string
+            (e.g., '123', '  12.5  ', '+3e-2'). Null 'Journal' is kept.
+        """
+        table = pq.read_table(self.parquet_path, memory_map=True)
+        src = table["__source_file__"]
+        mask_src = pc.and_(pc.is_valid(src), pc.not_equal(src, ""))
+        j = table["Journal"]
+        t = j.type
+        if pat.is_integer(t) or pat.is_floating(t):
+            mask_journal_keep = pc.is_null(j)
+        elif pat.is_string(t) or pat.is_large_string(t):
+            is_numeric_str = pc.match_substring_regex(
+                j,
+                r"^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?\s*$"
+            )
+            mask_journal_keep = pc.or_(pc.is_null(j), pc.invert(is_numeric_str))
+        else:
+            mask_journal_keep = pc.is_valid(j)
+        final_mask = pc.and_(mask_src, mask_journal_keep)
+        filtered = table.filter(final_mask)
+        pq.write_table(
+            filtered,
+            self.parquet_path,
+            use_dictionary=True,
+            compression="zstd",
+            write_statistics=True,
+        )
 
 
 def table_cast_like(table: pa.Table, target_schema: pa.schema) -> pa.Table:
@@ -187,8 +222,26 @@ def load_existing_index(csv_path: Path) -> set[str]:
     if not csv_path.exists():
         return set()
     try:
+        drop_empty_rows(csv_path)
         df = pd.read_csv(csv_path, usecols=["__source_file__"])
         return set(df["__source_file__"].dropna().astype(str).tolist())
     except Exception as e:
         logger.error(f"Error loading existing index from {csv_path}: {e}")
         return set()
+
+def drop_empty_rows(csv_path: Path):
+    """
+    Drop rows with:
+      - NaN in '__source_file__'
+      - 'Journal' that is numeric (int-like or float-like)
+    """
+    df = pd.read_csv(csv_path)
+    df = df.dropna(subset=["__source_file__"])
+    def is_numeric(x):
+        try:
+            float(str(x).strip())
+            return True
+        except:
+            return False
+    df = df[~df["Journal"].apply(is_numeric)]
+    df.to_csv(csv_path, index=False)
