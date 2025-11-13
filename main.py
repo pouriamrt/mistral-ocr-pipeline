@@ -233,4 +233,9 @@ async def amain():
 
 
 if __name__ == "__main__":
-    asyncio.run(amain())
+    # asyncio.run(amain())
+    if sys.platform in ("win32", "cygwin", "cli"):
+        from winloop import run
+    else:
+        from uvloop import run
+    run(amain())
