@@ -48,7 +48,8 @@ class Image(BaseModel):
 class ExtractionMetaDesign(BaseModel):
     """
     Guidelines:
-    1) Do not infer or guess. 2) Use null if unsure.
+    1) Do not infer or guess.
+    2) Use null if unsure.
     3) Output only facts explicitly in the PDF.
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
@@ -139,19 +140,10 @@ class ExtractionMetaDesign(BaseModel):
             "• Other: hybrid/methodological (validation, method development, mixed methods) not fitting above.\n"
         ),
     )
-    study_design_cues_detected: Optional[List[str]] = Field(
-        default=None,
-        alias="Study Design - cues detected",
-        description=(
-            "Verbatim keywords/phrases found that support the chosen design "
-            "(e.g., 'randomized', 'matched controls', 'ROC AUC 0.91', 'Cmax/AUC'). "
-            "Use null if not clearly present."
-        ),
-    )
     study_design_sentence_from_text: Optional[str] = Field(
         default=None,
         alias="Study Design Sentence from Text",
-        description="Exact sentence containing the study design.",
+        description="Exact sentences or paragraph containing the study design.",
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -163,7 +155,8 @@ class ExtractionMetaDesign(BaseModel):
 class ExtractionPopulationIndications(BaseModel):
     """
     Guidelines:
-    1) Do not infer or guess. 2) Use null if unsure.
+    1) Do not infer or guess.
+    2) Use null if unsure.
     3) Output only facts explicitly in the PDF.
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
@@ -181,7 +174,7 @@ class ExtractionPopulationIndications(BaseModel):
     total_patients_sentence_from_text: Optional[str] = Field(
         default=None,
         alias="Patient Population Sentence from Text",
-        description="Exact sentence with total patients.",
+        description="Exact sentences or paragraph containing the total patients.",
     )
 
     # DOACs included (measured)
@@ -198,16 +191,12 @@ class ExtractionPopulationIndications(BaseModel):
     doacs_included_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="DOACs Included Sentence from Text",
-        description="Exact sentences with the included DOACs.",
+        description="Exact sentences or paragraph containing the included DOACs.",
     )
 
     # Indications for anticoagulation (must apply to measured population)
     indication_for_anticoagulation: Optional[
-        List[
-            Literal[
-                "AF", "Treatment of VTE", "Prevention of VTE", "Other", "Not Reported"
-            ]
-        ]
+        List[Literal["AF", "VTE Treatment/Prevention", "Other", "Not Reported"]]
     ] = Field(
         default=None,
         alias="Patient population 2",
@@ -218,7 +207,7 @@ class ExtractionPopulationIndications(BaseModel):
     indication_for_anticoagulation_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Indications for Anticoagulation Sentence from Text",
-        description="Exact sentences with indications.",
+        description="Exact sentences or paragraph containing the indications for anticoagulation.",
     )
 
     # Relevant subgroups (must be explicitly studied/measured)
@@ -307,7 +296,7 @@ class ExtractionPopulationIndications(BaseModel):
     relevant_subgroups_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Relevant Subgroups Sentence from Text",
-        description="Exact sentences with the relevant subgroups.",
+        description="Exact sentences or paragraph containing the relevant subgroups.",
     )
 
     # Indications for DOAC level measurement
@@ -378,7 +367,7 @@ class ExtractionPopulationIndications(BaseModel):
         Field(
             default=None,
             alias="Indications for DOAC Level Measurement Sentence from Text",
-            description="Exact sentences with the indications.",
+            description="Exact sentences or paragraph containing the indications for DOAC level measurement.",
         )
     )
 
@@ -391,7 +380,8 @@ class ExtractionPopulationIndications(BaseModel):
 class ExtractionMethods(BaseModel):
     """
     Guidelines:
-    1) Do not infer or guess. 2) Use null if unsure.
+    1) Do not infer or guess.
+    2) Use null if unsure.
     3) Output only facts explicitly in the PDF.
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
@@ -428,6 +418,7 @@ class ExtractionMethods(BaseModel):
                 "Betrixaban - Qualitative/Point-of-Care (POCT)",
                 "Betrixaban - Other",
                 # Dabigatran
+                "Dabigatran - HPLC-MS (ng/mL)",
                 "Dabigatran - Thrombin Time (TT)",
                 "Dabigatran - Dilute Thrombin Time (dTT)",
                 "Dabigatran - Ecarin Clotting Time (ECT)",
@@ -449,7 +440,7 @@ class ExtractionMethods(BaseModel):
     doac_level_measurement_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="DOAC Level Measurement Sentence from Text",
-        description="Exact sentences with the DOAC level measurement.",
+        description="Exact sentences or paragraph containing the DOAC level measurement.",
     )
 
     doac_level_measurement_descriptors: Optional[
@@ -513,6 +504,11 @@ class ExtractionMethods(BaseModel):
             "Exclude laboratory capabilities mentioned but NOT used, and exclude review-style brand lists unless performed."
         ),
     )
+    doac_level_measurement_descriptors_sentence_from_text: Optional[List[str]] = Field(
+        default=None,
+        alias="DOAC Level Measurement Descriptors Sentence from Text",
+        description="Exact sentences or paragraph containing the DOAC level measurement descriptors.",
+    )
 
     # Pre-Analytical Variables
     pre_analytical_variables: Optional[
@@ -540,7 +536,7 @@ class ExtractionMethods(BaseModel):
     pre_analytical_variables_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Pre-Analytical Variables Sentence from Text",
-        description="Exact sentences with the pre-analytical variables.",
+        description="Exact sentences or paragraph containing the pre-analytical variables.",
     )
 
     # Conventional Coagulation Tests Concurrently Reported
@@ -579,7 +575,7 @@ class ExtractionMethods(BaseModel):
     global_coagulation_tests_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Global Coagulation Testing Sentence from Text",
-        description="Exact sentences with the global coagulation tests.",
+        description="Exact sentences or paragraph containing the global coagulation tests.",
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -591,8 +587,9 @@ class ExtractionMethods(BaseModel):
 class ExtractionOutcomes(BaseModel):
     """
     Guidelines:
-    1) Do not infer or guess. 2) Use null if unsure.
-    3) Output only facts explicitly in the PDF.
+    1) Do not infer or guess.
+    2) Use null if unsure.
+    3) Output only facts explicitly in the text.
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
@@ -606,8 +603,6 @@ class ExtractionOutcomes(BaseModel):
             Literal[
                 "Peak level (2–4 hours post-dose)",
                 "Trough level (just prior to next dose)",
-                "Trough level - ~11 hours post-dose for apixaban and dabigatran",
-                "Trough level - ~23 hours post-dose for rivaroxaban and edoxaban",
                 "Random level",
                 "Timing not reported",
             ]
@@ -619,8 +614,7 @@ class ExtractionOutcomes(BaseModel):
             "Timing category EXACTLY as stated in the study.\n\n"
             "Interpretation rules:\n"
             "• ‘Peak level’ = 2–4h post-dose.\n"
-            "• The ~11h (apixaban/dabigatran) and ~23h (rivaroxaban/edoxaban) literals are BOTH considered trough timing "
-            "and must not be placed under a separate category.\n"
+            "• ‘Trough level’ = the ~11h (apixaban/dabigatran) and ~23h (rivaroxaban/edoxaban) post-dose timings.\n"
             "• ‘Random level’ = timing reported but unclear whether peak or trough.\n"
             "• ‘Timing not reported’ = no timing provided in Methods/Results.\n\n"
             "Select ALL that apply if a study measured multiple timepoints."
