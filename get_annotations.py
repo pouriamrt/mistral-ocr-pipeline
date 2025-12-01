@@ -16,6 +16,7 @@ from extraction_payload import (
     ExtractionPopulationIndications,  # class 2
     ExtractionMethods,  # class 3
     ExtractionOutcomes,  # class 4
+    ExtractionDiagnosticPerformance,  # class 5
 )
 
 from utils import merge_multiple_dicts_async
@@ -136,6 +137,7 @@ async def run_all_payloads(
         ExtractionPopulationIndications,
         ExtractionMethods,
         ExtractionOutcomes,
+        ExtractionDiagnosticPerformance,
     ]
 
     tasks = [

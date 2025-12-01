@@ -1,5 +1,5 @@
 from typing import List, Optional, Literal, Type
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 
 
@@ -17,6 +17,7 @@ def df_cols_from_models(use_alias: bool = True) -> List[str]:
         ExtractionPopulationIndications,
         ExtractionMethods,
         ExtractionOutcomes,
+        ExtractionDiagnosticPerformance,
     ]
     seen, out = set(), []
     for cls in models:
@@ -115,29 +116,43 @@ class ExtractionMetaDesign(BaseModel):
         default=None,
         alias="Study Design",
         description=(
-            "Study design (controlled list).\n\n"
-            "Classification rule (to prevent overuse of 'Non-Randomized Observational Study'):\n"
-            "• Always pick the most specific applicable category first. Use 'Non-Randomized Observational Study' ONLY when none of the specific designs below fit.\n"
-            "• If multiple cues appear, resolve by this specificity priority:\n"
-            "   RCT > Diagnostic Test Accuracy > Pharmacokinetic > Case-Control > Cohort > Cross-Sectional > "
-            "   Non-Randomized Experimental > Non-Randomized Observational > Case Series > Case Report > "
-            "   In Silico Simulation Analysis > Systematic Review > Qualitative Research > Other.\n"
-            "• Do not infer; use explicit language in Title/Abstract/Methods. If ambiguous, return null.\n\n"
-            "Disambiguation cues (non-exhaustive):\n"
-            "• Randomized Controlled Trial: randomized, allocation, double-blind, placebo-controlled, trial registration, intention-to-treat, control arm, primary endpoint.\n"
-            "• Cohort Study: prospective/retrospective cohort, follow-up, incidence, registry, time-to-event, hazard ratio, baseline characteristics.\n"
-            "• Non-Randomized Experimental Study: interventional but no randomization; single-arm, open-label, pilot intervention, protocol evaluation, dose adjustment.\n"
-            "• Non-Randomized Observational Study: observational/registry/chart review, real-world, retrospective analysis; no assigned intervention.\n"
-            "• Cross-Sectional Study: cross-sectional, point prevalence, single time point, surveyed, baseline-only measurement.\n"
-            "• Case-Control Study: case-control, matched controls, odds ratio, retrospective comparison, 'cases were matched to controls'.\n"
-            "• Pharmacokinetic Study: pharmacokinetic/PK, Cmax, AUC, half-life, sampling at trough/peak, LC-MS/chromogenic anti-Xa.\n"
-            "• In Silico Simulation Analysis: modeling/simulation, population PK/PD, PBPK, Monte Carlo, virtual/simulated cohort.\n"
-            "• Systematic Review: systematic review/meta-analysis, PRISMA, pooled analysis, predefined inclusion criteria, literature search.\n"
-            "• Qualitative Research: qualitative, interviews/focus groups, thematic/framework analysis, perceptions/attitudes.\n"
-            "• Diagnostic Test Accuracy Study: sensitivity/specificity, ROC/AUC, agreement/validation vs reference standard, assay comparison (e.g., LC-MS vs anti-Xa).\n"
-            "• Case Series: case series/clinical experience; multiple patients, no control, small N with tabulated individual data.\n"
-            "• Case Report: case report/single patient/rare event with detailed narrative.\n"
-            "• Other: hybrid/methodological (validation, method development, mixed methods) not fitting above.\n"
+            "CRITICAL: Use explicit hierarchy with definitions. Classify based on the PRIMARY goal of the study.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Title/Abstract/Methods that describe the study design or primary goal.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, apply the hierarchy below to classify.\n\n"
+            "HIERARCHY (apply in order, stop at first match):\n"
+            "1) If primary goal is to assess test performance vs reference standard (sensitivity/specificity, ROC/AUC, agreement/validation) "
+            "   → 'Diagnostic Test Accuracy Study'\n"
+            "2) Else if randomized groups (randomized, allocation, double-blind, placebo-controlled, trial registration) "
+            "   → 'Randomized Controlled Trial'\n"
+            "3) Else if prospective measurement of outcomes in a defined cohort without randomization (prospective/retrospective cohort, "
+            "   follow-up, incidence, registry, time-to-event) → 'Cohort Study'\n"
+            "4) Else if purely describing PK curves in a defined regimen (pharmacokinetic/PK, Cmax, AUC, half-life, sampling at trough/peak) "
+            "   → 'Pharmacokinetic Study'\n"
+            "5) Else if case-control design (case-control, matched controls, odds ratio, retrospective comparison) "
+            "   → 'Case-Control Study'\n"
+            "6) Else if cross-sectional design (cross-sectional, point prevalence, single time point, baseline-only measurement) "
+            "   → 'Cross-Sectional Study'\n"
+            "7) Else if interventional but no randomization (single-arm, open-label, pilot intervention, protocol evaluation) "
+            "   → 'Non-Randomized Experimental Study'\n"
+            "8) Else if systematic review/meta-analysis (PRISMA, pooled analysis, predefined inclusion criteria, literature search) "
+            "   → 'Systematic Review'\n"
+            "9) Else if modeling/simulation (population PK/PD, PBPK, Monte Carlo, virtual/simulated cohort) "
+            "   → 'In Silico Simulation Analysis'\n"
+            "10) Else if qualitative research (interviews/focus groups, thematic/framework analysis, perceptions/attitudes) "
+            "    → 'Qualitative Research'\n"
+            "11) Else if case series (multiple patients, no control, small N with tabulated individual data) "
+            "    → 'Case Series'\n"
+            "12) Else if case report (single patient/rare event with detailed narrative) "
+            "    → 'Case Report'\n"
+            "13) Else if observational/registry/chart review without assigned intervention "
+            "    → 'Non-Randomized Observational Study'\n"
+            "14) Else → 'Other'\n\n"
+            "Common misclassifications to avoid:\n"
+            "• Labeling a diagnostic test accuracy study as 'prospective observational cohort'.\n"
+            "• Labeling a prospective cohort with PK/PD components as a pure 'pharmacokinetic study' "
+            "  (if outcomes are measured, it's likely a Cohort Study, not Pharmacokinetic Study).\n\n"
+            "Do not infer; use explicit language in Title/Abstract/Methods. If ambiguous, return null."
         ),
     )
     study_design_sentence_from_text: Optional[str] = Field(
@@ -231,66 +246,42 @@ class ExtractionPopulationIndications(BaseModel):
         default=None,
         alias="Patient population 3",
         description=(
-            "Include a subgroup ONLY if DOAC levels were measured within that subgroup in THIS study "
-            "(e.g., calibrated anti-Xa, LC/LC-MS/MS, thrombin-based assays for dabigatran). "
-            "Do NOT infer. If ambiguous, leave null. If multiple subgroups are analyzed and measured, "
-            "return all that apply.\n\n"
-            "General exclusions for ALL subgroups: (a) Mentioned only in baseline characteristics without level stratification; "
-            "(b) Protocols/guidelines/hypothetical modeling without patient-level measurements; "
-            "(c) Claims/registry outcomes without measured DOAC levels; "
-            "(d) In vitro/animal-only data.\n\n"
-            "Subgroup-specific cues:\n"
-            "1) High body weight (obesity)\n"
-            "   Positive keywords: obesity/obese, high body weight, BMI ≥30/≥35/≥40 kg/m², morbid/severe obesity, weight >120 kg, "
-            "   'extreme body weight', 'super-obese'.\n"
-            "   Signals: dosing/PK in obesity; on-treatment concentrations in obese patients; anti-Xa calibration in high BMI.\n"
-            "   Exclusions: weight-adjusted dose discussed but no measured levels; obesity only appears in baseline table.\n"
-            "   Edge: post-bariatric obesity → classify here AND Bariatric if BOTH are explicitly analyzed with measured levels.\n\n"
-            "2) Low body weight\n"
-            "   Positive keywords: low body weight, underweight, ≤60 kg, <50 kg, ≤45 kg, cachexia, sarcopenia.\n"
-            "   Signals: level comparisons by ≤60 vs >60 kg; reduced dose criteria analyzed with measured levels.\n"
-            "   Exclusions: only dose-label criteria mentioned; no measured levels.\n\n"
-            "3) Chronic kidney disease/dialysis\n"
-            "   Positive keywords: CKD, renal impairment, eGFR, CrCl (Cockcroft-Gault), KDIGO stages, ESRD/ESKD, hemodialysis, peritoneal dialysis.\n"
-            "   Signals: trough/peak levels by renal strata; accumulation; timing vs dialysis; dialyzability.\n"
-            "   Exclusions: creatinine reported without renal stratification; anti-Xa 'activity' not calibrated to DOAC.\n\n"
-            "4) Bariatric surgery/malabsorption\n"
-            "   Positive keywords: bariatric (Roux-en-Y, sleeve, bypass, BPD/DS), short-bowel, celiac, Crohn’s with resection, malabsorption, "
-            "   'altered absorption'.\n"
-            "   Signals: pre-/post-op levels, AUC/peak comparisons, time since surgery.\n"
-            "   Exclusions: perioperative thromboprophylaxis without DOAC levels.\n\n"
-            "5) Drug-DOAC pharmacokinetic interactions\n"
-            "   Positive keywords: P-gp, CYP3A4 inhibitors/inducers, DDI/drug interaction; named comedications (e.g., amiodarone, verapamil, "
-            "   diltiazem, dronedarone, ketoconazole/itraconazole/posaconazole/voriconazole, ritonavir/cobicistat, clarithromycin/erythromycin, "
-            "   cyclosporine/tacrolimus; inducers: rifampin, carbamazepine, phenytoin, phenobarbital, primidone, St. John’s wort).\n"
-            "   Signals: level shift present vs absent; dose adjustment guided by measured levels.\n"
-            "   Exclusions: claims-data risk without level measurements.\n\n"
-            "6) Advanced age/frailty\n"
-            "   Positive keywords: elderly, ≥75/≥80, octogenarian, nonagenarian, geriatric, frailty (CFS/Rockwood/HFRS).\n"
-            "   Signals: levels by age strata; frailty index vs levels; dose-reduction age criterion analyzed with levels.\n"
-            "   Exclusions: age appears only in baseline; no level stratification.\n\n"
-            "7) Elective procedure/surgery\n"
-            "   Positive keywords: elective surgery, planned procedure, neuraxial anesthesia, perioperative management, hold time, "
-            "   residual level thresholds (e.g., 30 or 50 ng/mL).\n"
-            "   Signals: pre-op levels guiding timing/clearance; correlation of level with bleeding in ELECTIVE setting.\n"
-            "   Exclusions: protocols without measured pre-op levels.\n\n"
-            "8) Urgent/emergent procedure/surgery\n"
-            "   Positive keywords: urgent/emergent surgery, trauma, unplanned procedure, hip fracture ≤24–48 h, emergency endoscopy.\n"
-            "   Signals: rapid level testing; proceed/cancel decisions based on level; time-to-surgery vs level.\n"
-            "   Exclusions: emergent cases described but no measured levels guiding care.\n\n"
-            "9) Acute stroke/thrombolysis\n"
-            "   Positive keywords: acute ischemic stroke, thrombolysis (alteplase/tenecteplase, rtPA/tPA), thrombectomy, lytic eligibility, "
-            "   residual concentration.\n"
-            "   Signals: thresholds used to qualify/deny lysis; associations with hemorrhagic transformation/outcomes; calibrated anti-Xa or LC-MS/MS in protocol.\n"
-            "   Exclusions: stroke registries without levels; lysis outcomes without level quantification; modeling/guidelines only.\n\n"
-            "10) DOAC-associated bleeding + DOAC Reversal\n"
-            "   Positive keywords: major/life-threatening bleeding, ICH, GI bleed, retroperitoneal; andexanet alfa, idarucizumab, PCC/aPCC, ciraparantag, reversal.\n"
-            "   Signals: level at presentation; pre-/post-reversal levels; baseline concentration vs hemostatic efficacy; quantified residual level after reversal.\n"
-            "   Exclusions: bleeding/reversal studies without level measurements; in vitro/animal; single case without numeric level.\n\n"
-            "11) Genetic polymorphism (e.g., CYP polymorphism)\n"
-            "   Positive keywords: pharmacogenetics/pharmacogenomics, SNP/rs identifiers, genotype/allele; CYP3A4/3A5/2J2, ABCB1 (P-gp), CES1, UGT, SLCO1B1.\n"
-            "   Signals: levels stratified by genotype; genotype associations with PK metrics (AUC, trough, peak, clearance).\n"
-            "   Exclusions: genotyping without measured DOAC levels; simulations only; review-only; animal/cell studies.\n"
+            "CRITICAL: Include a subgroup ONLY if at least ONE of these is true:\n"
+            "1) The inclusion criteria explicitly restrict to that subgroup (e.g., 'patients with CKD stage 3–5').\n"
+            "2) The study defines a pre-specified subgroup analysis (e.g., 'we analyzed outcomes separately in patients with body weight ≥120 kg').\n"
+            "3) The title or objectives clearly state that subgroup (e.g., '...in patients with short bowel syndrome').\n\n"
+            "EXPLICIT NEGATIVE RULE: Do NOT label a subgroup solely because:\n"
+            "• The characteristic is reported in baseline tables or baseline characteristics.\n"
+            "• The characteristic is mentioned in the Introduction or Background.\n"
+            "• A single keyword appears without explicit subgroup analysis or restriction.\n"
+            "• DOAC levels were measured but NOT stratified by that subgroup.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote the exact sentences from Methods/Results (NOT Introduction) that describe subgroup restriction or analysis.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the subgroup. If no explicit restriction/analysis exists, leave null.\n\n"
+            "Subgroup-specific criteria (all require explicit restriction/analysis, NOT just keywords):\n"
+            "1) High body weight (obesity) — Requires: inclusion criteria restricting to obese patients, OR explicit subgroup analysis by BMI/weight strata with measured levels.\n"
+            "   Exclusions: BMI/weight in baseline table only; generic discussion of obesity without measured level stratification.\n\n"
+            "2) Low body weight — Requires: inclusion criteria restricting to low-weight patients, OR explicit analysis comparing levels by weight strata (e.g., ≤60 kg vs >60 kg).\n"
+            "   Exclusions: weight reported in baseline only; dose-label criteria mentioned without measured level analysis.\n\n"
+            "3) Chronic kidney disease/dialysis — Requires: inclusion criteria restricting to CKD/dialysis patients, OR explicit analysis of levels by renal function strata (eGFR/CrCl stages).\n"
+            "   Exclusions: creatinine/eGFR reported in baseline without level stratification; generic mention of 'renal impairment' in Introduction.\n\n"
+            "4) Bariatric surgery/malabsorption — Requires: inclusion criteria restricting to post-bariatric patients, OR explicit pre/post-op level comparisons.\n"
+            "   Exclusions: perioperative protocols without measured levels; generic discussion of malabsorption.\n\n"
+            "5) Drug-DOAC pharmacokinetic interactions — Requires: inclusion criteria restricting to patients on interacting drugs, OR explicit comparison of levels with vs without comedication.\n"
+            "   Exclusions: comedication listed in baseline without level comparison; generic DDI discussion.\n\n"
+            "6) Advanced age/frailty — Requires: inclusion criteria restricting to elderly/frail patients, OR explicit analysis of levels by age/frailty strata.\n"
+            "   Exclusions: age reported in baseline only; generic mention of 'elderly' in Introduction.\n\n"
+            "7) Elective procedure/surgery — Requires: inclusion criteria restricting to elective surgery patients, OR explicit analysis of pre-op levels guiding timing.\n"
+            "   Exclusions: protocols without measured pre-op levels; generic perioperative discussion.\n\n"
+            "8) Urgent/emergent procedure/surgery — Requires: inclusion criteria restricting to urgent/emergent cases, OR explicit analysis of levels guiding proceed/cancel decisions.\n"
+            "   Exclusions: emergent cases described without measured levels; generic emergency discussion.\n\n"
+            "9) Acute stroke/thrombolysis — Requires: inclusion criteria restricting to stroke/thrombolysis patients, OR explicit use of levels to determine lytic eligibility.\n"
+            "   Exclusions: stroke registries without levels; generic stroke discussion.\n\n"
+            "10) DOAC-associated bleeding + DOAC Reversal — Requires: inclusion criteria restricting to bleeding/reversal patients, OR explicit analysis of pre/post-reversal levels.\n"
+            "   Exclusions: bleeding described without measured levels; generic reversal discussion.\n\n"
+            "11) Genetic polymorphism — Requires: inclusion criteria restricting to specific genotypes, OR explicit analysis of levels by genotype.\n"
+            "   Exclusions: genotyping performed without level stratification; generic pharmacogenetics discussion.\n\n"
+            "If ambiguous or no explicit restriction/analysis exists, leave null. Do NOT guess based on keywords alone."
         ),
     )
     relevant_subgroups_sentence_from_text: Optional[List[str]] = Field(
@@ -324,43 +315,43 @@ class ExtractionPopulationIndications(BaseModel):
         default=None,
         alias="Indications for DOAC Level Measurement",
         description=(
-            "Return ALL explicit reasons the study measured DOAC levels, as stated in Methods/Results. "
-            "Include ONLY if patient samples were actually quantified in THIS study. "
-            "Exclude Background/Discussion-only rationale, simulations without patient data, and registries with no level measurements.\n\n"
-            "General cues for inclusion: purpose phrasing like 'measured to…', 'levels were used to…', "
-            "'we evaluated exposure…', 'guided clinical decision', with numeric concentrations or calibrated anti-Xa/LC-MS/MS results.\n\n"
-            "Category cues:\n"
-            "1) Confirm adherence — Keywords: adherence/compliance/persistence, missed dose, verify/confirm intake/last dose. "
-            "Signals: trough/undetectable levels used to confirm/refute ingestion; compare self-report vs measured level. "
+            "CRITICAL: First answer the primary question: 'What was the main purpose for measuring DOAC levels in this study?'\n"
+            "Then include ALL explicit reasons stated in Methods/Results (NOT Introduction/Discussion).\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods/Results that state why DOAC levels were measured. "
+            "Look for purpose phrasing like 'measured to…', 'levels were used to…', 'we evaluated exposure…', "
+            "'guided clinical decision', 'we assessed correlation...'.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the indication(s).\n\n"
+            "Include an indication ONLY if:\n"
+            "1) It is explicitly stated in Methods/Results (NOT just mentioned in passing in Introduction/Discussion).\n"
+            "2) Patient samples were actually quantified in THIS study (not simulations, not external registries).\n"
+            "3) It is central to the study objectives, not mentioned in passing.\n\n"
+            "Do NOT over-label. Common errors to avoid:\n"
+            "• Marking multiple overlapping indications (e.g., 'bleeding risk', 'thrombosis', 'CKD') when the study "
+            "  is simply 'evaluate DOAC exposure/assay performance'.\n"
+            "• Including indications mentioned only in Background/Discussion without explicit measurement purpose.\n"
+            "• Inferring indications from baseline characteristics without explicit measurement rationale.\n\n"
+            "Category-specific rules:\n"
+            "1) Confirm adherence — Requires explicit statement that levels were used to verify/confirm intake. "
             "Exclusions: questionnaires/refill/pill count only.\n\n"
-            "2) Evaluate DOAC level exposure (condition-specific):\n"
-            "  2a) Bariatric surgery — bariatric, Roux-en-Y, sleeve, bypass, BPD/DS, short-bowel, malabsorption. "
-            "      Signals: pre/post-op levels, AUC/peak/trough vs time since surgery. Exclusions: dosing talk only.\n"
-            "  2b) Drug–DOAC interaction — DDI, P-gp, CYP3A4/5 inhibitors/inducers (e.g., amiodarone, azoles, ritonavir; rifampin, carbamazepine). "
-            "      Signals: level shift with/without comedication. Exclusions: prescribing data only.\n"
-            "  2c) Chronic kidney failure — CKD, eGFR/CrCl strata, ESRD/ESKD, hemo/peritoneal dialysis. "
-            "      Signals: accumulation/clearance by renal stage; timing vs dialysis. Exclusions: creatinine without level strata.\n"
-            "  2d) Obesity — BMI ≥40, weight >120 kg, morbid/severe obesity. Signals: levels/AUC vs BMI groups. "
-            "      Exclusions: baseline only.\n"
-            "  2e) Residual level after elective interruption — residual/pre-op level, hold time, timing of last dose. "
-            "      Signals: measured pre-procedure level to meet <30–50 ng/mL threshold. Exclusions: timing protocols without levels.\n\n"
-            "3) Identify predictors of DOAC level exposure — predictors/determinants/covariates, regression/association of levels with factors. "
-            "Exclusions: predictors of outcomes without concentration analysis.\n"
-            "  3a) Cmax, Ctrough, AUC — explicit PK parameters (Cmax/Ctrough/AUC/Tmax) calculated from patient samples; exclude label/simulation-only.\n\n"
-            "4) Guide clinical decision-making — therapeutic drug monitoring; levels directly inform care. "
-            "Exclusions: levels measured for research reporting only.\n"
-            "  4a) Urgent surgery — emergency/trauma/hip fracture/endoscopy timing guided by measured level.\n"
-            "  4b) Major bleeding + reversal — ICH/GI bleed; andexanet/idarucizumab/PCC; pre/post-reversal levels; efficacy vs baseline level.\n"
-            "  4c) Thrombolysis — acute ischemic stroke; alteplase/tenecteplase eligibility determined by measured level.\n"
-            "  4d) Guide dose adjustment — dose increase/reduction explicitly based on measured concentration.\n\n"
-            "5) Measure correlation with other laboratory techniques — quantitative correlation/validation vs another test. "
-            "Exclusions: qualitative statements without numeric comparison.\n"
-            "  5a) Conventional coagulation testing — PT/INR, aPTT, TT/dTT, ECT, ROTEM/viscoelastic vs measured DOAC concentration.\n"
-            "  5b) HPLC-MS vs calibrated anti-Xa measurement — method comparison/validation using clinical samples.\n\n"
-            "6) Risk prediction and clinical outcome association — levels associated with outcomes, thresholds/ROC used. "
-            "Exclusions: outcomes without measured concentrations.\n"
-            "  6a) Bleeding — ISTH major, ICH, GI bleeding vs level.\n"
-            "  6b) Thrombosis — stroke/VTE/DVT/PE vs level."
+            "2) Evaluate DOAC level exposure (condition-specific) — Requires explicit analysis of levels in that condition:\n"
+            "  2a) Bariatric surgery — explicit pre/post-op level comparisons or time-since-surgery analysis.\n"
+            "  2b) Drug–DOAC interaction — explicit comparison of levels with vs without comedication.\n"
+            "  2c) Chronic kidney failure — explicit level analysis by renal function strata.\n"
+            "  2d) Obesity — explicit level analysis by BMI/weight groups.\n"
+            "  2e) Residual level after elective interruption — explicit measurement of pre-procedure levels.\n\n"
+            "3) Identify predictors of DOAC level exposure — Requires explicit regression/association analysis of levels with factors. "
+            "Cmax/Ctrough/AUC: explicit PK parameters calculated from patient samples.\n\n"
+            "4) Guide clinical decision-making — Requires explicit statement that levels directly informed care:\n"
+            "  4a) Urgent surgery — timing guided by measured level.\n"
+            "  4b) Major bleeding + reversal — pre/post-reversal levels used to guide reversal.\n"
+            "  4c) Thrombolysis — eligibility determined by measured level.\n"
+            "  4d) Guide dose adjustment — dose change explicitly based on measured concentration.\n\n"
+            "5) Measure correlation with other laboratory techniques — Requires explicit quantitative correlation/validation. "
+            "Exclusions: qualitative statements without numeric comparison.\n\n"
+            "6) Risk prediction and clinical outcome association — Requires explicit association analysis of levels with outcomes. "
+            "Exclusions: outcomes without measured concentrations.\n\n"
+            "If the article does not clearly report the indication, do not guess. Leave null if unsure."
         ),
     )
     indications_for_doac_level_measurement_sentence_from_text: Optional[List[str]] = (
@@ -484,22 +475,40 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="DOAC Level Measurement Descriptors",
         description=(
-            "Return ALL assay descriptor(s) that were actually used in THIS study to quantify the DOAC level "
-            "(patient sample measurements only). Do NOT infer from Background/Discussion.\n\n"
+            "CRITICAL: Scan the ENTIRE Methods section for assay terms. Return ALL assay descriptors that were actually used "
+            "in THIS study to quantify DOAC levels (patient sample measurements only). Do NOT infer from Background/Discussion.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods that describe the assay methods used. "
+            "Scan for ALL synonyms and variants (see synonym map below).\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify ALL applicable methods.\n\n"
+            "SYNONYM MAP (use to identify methods even if exact term not used):\n"
+            "• LC-MS/MS / UPLC-MS / HPLC-MS / HPLC-MS/MS / mass spectrometry / liquid chromatography-mass spectrometry "
+            "  → 'LC-MS/MS quantitative assay (ng/mL)'\n"
+            "• Hemoclot / dTT / diluted thrombin time / HemosIL DTI / INNOVANCE DTI "
+            "  → 'Dilute Thrombin Time (dTT) calibrated (ng/mL)'\n"
+            "• DiXaI / Biophen / calibrated anti-Xa / drug-specific anti-Xa / STA-Liquid Anti-Xa + drug calibrator / "
+            "  TECHNOVIEW / HemosIL Liquid Anti-Xa + drug calibrators / Innovance Heparin anti-Xa with drug calibrators / "
+            "  COAMATIC / Berichrom / Rotachrom with drug calibrators "
+            "  → 'Calibrated anti-Xa assay (ng/mL)'\n"
+            "• Heparin-calibrated anti-Xa / LMWH-calibrated / UFH-calibrated (without drug-specific calibration) "
+            "  → 'Heparin-calibrated anti-Xa assay (IU/mL)'\n"
+            "• Thrombograms / CAT / calibrated automated thrombography / thrombin generation "
+            "  → Note: This is NOT a DOAC level measurement method; do NOT include here.\n"
+            "• TEG / ROTEM / viscoelastic testing "
+            "  → Note: This is NOT a DOAC level measurement method; do NOT include here.\n\n"
             "Definitions:\n"
             "• Calibrated anti-Xa assay (ng/mL) = DOAC-specific calibration materials were used.\n"
-            "  Common systems: Stago STA-Liquid Anti-Xa + drug calibrator; BIOPHEN DiXaI/DiXaL + drug calibrators; "
-            "  TECHNOVIEW (drug-specific); HemosIL Liquid Anti-Xa + drug calibrators; Innovance Heparin anti-Xa with drug calibrators; "
-            "  COAMATIC / Berichrom / Rotachrom with drug calibrators.\n\n"
-            "• Heparin-calibrated anti-Xa assay (IU/mL) = LMWH/UFH-calibrated assay used with NO drug-specific calibration.\n\n"
-            "• LC-MS/MS quantitative assay (ng/mL) = mass-spectrometry-based direct concentration measurement "
-            "of the DOAC (reference standard method).\n\n"
-            "• Qualitative / Point-of-Care (POCT) = DOAC Dipstick or equivalent qualitative device.\n\n"
-            "• Dilute Thrombin Time (dTT) calibrated (ng/mL) = dabigatran-specific calibrated clotting assay "
-            "(e.g., Hemoclot Thrombin Inhibitor / HemosIL DTI / INNOVANCE DTI).\n\n"
-            "• Ecarin-based assays (ng/mL) = calibrated dabigatran methods: ECT (clot-based) or ECA (chromogenic) "
-            "(e.g., STA-ECA II / ECA-T).\n\n"
+            "• Heparin-calibrated anti-Xa assay (IU/mL) = LMWH/UFH-calibrated assay used with NO drug-specific calibration.\n"
+            "• LC-MS/MS quantitative assay (ng/mL) = mass-spectrometry-based direct concentration measurement of the DOAC.\n"
+            "• Qualitative / Point-of-Care (POCT) = DOAC Dipstick or equivalent qualitative device.\n"
+            "• Dilute Thrombin Time (dTT) calibrated (ng/mL) = dabigatran-specific calibrated clotting assay.\n"
+            "• Ecarin-based assays (ng/mL) = calibrated dabigatran methods: ECT (clot-based) or ECA (chromogenic).\n"
             "• Non-calibrated TT (seconds) = qualitative TT index sensitive to dabigatran at low levels, NOT quantitative.\n\n"
+            "Common errors to avoid:\n"
+            "• Missing LC-MS/UPLC-MS when clearly described in Methods.\n"
+            "• Missing TT (for dabigatran) when clearly described.\n"
+            "• Partial recognition: identifying some methods (e.g., dTT, anti-Xa) but missing others (TT, LC-MS) in the same paragraph.\n"
+            "• Including manufacturer names (e.g., Technoclone) as evidence of method use without explicit description.\n\n"
             "Include only methods actually applied to patient samples in THIS study. "
             "Exclude laboratory capabilities mentioned but NOT used, and exclude review-style brand lists unless performed."
         ),
@@ -524,13 +533,24 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="Pre-Analytical Variables",
         description=(
-            "Pre-analytical variables actually applied to DOAC level measurement in this study "
-            "(not background examples). Include only if used for the specimens measured.\n"
+            "CRITICAL: Scan the ENTIRE Methods section for pre-analytical variable descriptions. "
+            "Include ONLY if explicitly described as applied to DOAC level measurement specimens in THIS study.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods that describe pre-analytical procedures "
+            "(collection, tube type, centrifugation, storage).\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the variables.\n\n"
+            "Include a variable ONLY if:\n"
+            "1) It is explicitly described in Methods (not just mentioned in Discussion/Background).\n"
+            "2) It was applied to the specimens measured in THIS study (not background examples).\n\n"
+            "Common errors to avoid:\n"
+            "• False negatives: Leaving this blank even when centrifugation speed, temperature, storage are clearly described in Methods.\n"
+            "• Including variables mentioned only in Discussion/Background without Methods description.\n\n"
             "Examples:\n"
             "• Blood collection procedures → needle gauge / tourniquet\n"
             "• Collection tube type → e.g., 2.7% citrate BD\n"
             "• Centrifugation speed → e.g., 1500g\n"
-            "• Storage temperature → e.g., -80°C"
+            "• Storage temperature → e.g., -80°C\n\n"
+            "If the article does not clearly report pre-analytical variables, leave null. Do NOT guess."
         ),
     )
     pre_analytical_variables_sentence_from_text: Optional[List[str]] = Field(
@@ -550,8 +570,20 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="Conventional Coagulation Tests Concurrently Reported",
         description=(
-            "Conventional coagulation assays (PT, aPTT) that were reported together with "
-            "DOAC level measurement in this study. Include only if used for the specimens measured."
+            "CRITICAL: Scan the ENTIRE Methods section for conventional coagulation test terms. "
+            "Include ONLY if explicitly described as performed on the same specimens as DOAC level measurement.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods that describe which conventional coagulation tests were performed. "
+            "Look for explicit listings like 'PT, aPTT, and TT were measured' or 'coagulation tests included PT and aPTT'.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the tests.\n\n"
+            "Include a test ONLY if:\n"
+            "1) It is explicitly listed in Methods as performed (not just mentioned in Discussion/Background).\n"
+            "2) It was performed on the same specimens as DOAC level measurement.\n\n"
+            "Common errors to avoid:\n"
+            "• False negatives: Leaving this blank despite a clear Methods paragraph listing PT/aPTT/TT.\n"
+            "• False positives: Inferring aPTT from the word 'thromboplastin' when only PT is actually measured.\n"
+            "• Inferring aPTT when only PT is reported: Reporting PT alone does NOT imply aPTT was performed.\n\n"
+            "If the article does not clearly report which conventional tests were performed, leave null. Do NOT guess."
         ),
     )
     coagulation_tests_concurrent_sentence_from_text: Optional[List[str]] = Field(
@@ -570,7 +602,31 @@ class ExtractionMethods(BaseModel):
     ] = Field(
         default=None,
         alias="Global Coagulation Testing",
-        description="Global coagulation assays reported in addition to DOAC level testing. Include only if used for the specimens measured.",
+        description=(
+            "CRITICAL: Scan the ENTIRE Methods section for global coagulation test terms. "
+            "Include ONLY if explicitly described as performed on the same specimens as DOAC level measurement.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods that describe which global coagulation tests were performed. "
+            "Look for explicit descriptions of thrombin generation or viscoelastic testing.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the tests.\n\n"
+            "SYNONYM MAP:\n"
+            "• Thrombin generation / CAT / calibrated automated thrombography / thrombograms / TGA / "
+            "  Technothrombin / Innovance ETP / ST Genesia "
+            "  → 'Thrombin Generation Assay (TGA)'\n"
+            "• TEG / thromboelastography / ROTEM / rotational thromboelastometry / viscoelastic testing / "
+            "  ROTEM Delta / ROTEM Sigma / TEG 5000 / TEG 6s / Quantra / SEER Sonorheometry / ClotPro / "
+            "  Sonoclot Analyzer "
+            "  → 'Viscoelastic testing (ROTEM/TEG)'\n\n"
+            "Include a test ONLY if:\n"
+            "1) It is explicitly described in Methods as performed (not just mentioned in Discussion/Background).\n"
+            "2) It was performed on the same specimens as DOAC level measurement.\n\n"
+            "Common errors to avoid:\n"
+            "• Missing thrombin generation (CAT) when explicitly described.\n"
+            "• Misinterpreting manufacturer names (e.g., Technoclone) as evidence that thrombin generation or viscoelastic testing "
+            "  was actually performed, without explicit description of the test.\n"
+            "• Including tests mentioned only in Discussion/Background without Methods description.\n\n"
+            "If the article does not clearly report which global tests were performed, leave null. Do NOT guess."
+        ),
     )
     global_coagulation_tests_sentence_from_text: Optional[List[str]] = Field(
         default=None,
@@ -611,36 +667,35 @@ class ExtractionOutcomes(BaseModel):
         default=None,
         alias="Timing of DOAC level measurement relative to DOAC intake",
         description=(
-            "Timing category EXACTLY as stated in the study.\n\n"
-            "Interpretation rules:\n"
-            "• ‘Peak level’ = 2–4h post-dose.\n"
-            "• ‘Trough level’ = the ~11h (apixaban/dabigatran) and ~23h (rivaroxaban/edoxaban) post-dose timings.\n"
-            "• ‘Random level’ = timing reported but unclear whether peak or trough.\n"
-            "• ‘Timing not reported’ = no timing provided in Methods/Results.\n\n"
+            "CRITICAL: Classify timing based on explicit interval from last dose, NOT clock times or background PK descriptions.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods/Results (NOT Introduction/Background) "
+            "that describe when samples were collected relative to DOAC dosing.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the timing.\n\n"
+            "Classification rules:\n"
+            "• 'Peak level (2–4 hours post-dose)' = Explicit interval from last dose is ~2–4 hours "
+            "(e.g., '2 hours after dose', '3 hours post-dose', 'samples collected 2–4 hours after administration').\n\n"
+            "• 'Trough level (just prior to next dose)' = Explicit interval from last dose corresponds to just before next scheduled dose "
+            "(e.g., '12 hours after last dose' for apixaban/dabigatran, '24 hours after last dose' for rivaroxaban/edoxaban, "
+            "'just prior to next dose', 'pre-dose', 'trough level').\n\n"
+            "• 'Random level' = Timing is described ONLY as a clock time (e.g., 'between 9 and 11 am', 'sample at 11:00') "
+            "WITHOUT linkage to last dose, OR timing is reported but unclear whether peak or trough.\n\n"
+            "• 'Timing not reported' = No timing information provided in Methods/Results.\n\n"
+            "Common errors to avoid:\n"
+            "• Treating a clock time ('sample at 11:00') as 'trough' rather than recognizing it's just a random level.\n"
+            "• Treating background statements about peak/trough kinetics (in Introduction/Background) as though they describe "
+            "the actual sampling in the current study.\n"
+            "• For systematic reviews: If included studies mix peak and trough and the review aggregates them, "
+            "you may label both Peak+Trough, but document in the sentence that this applies to different source studies.\n\n"
+            "Do NOT infer timing from pharmacokinetic descriptions in Background. "
+            "Only use explicit sampling schedule descriptions from Methods/Results.\n\n"
             "Select ALL that apply if a study measured multiple timepoints."
         ),
     )
-
-    @field_validator("timing_of_measurement", mode="after")
-    def _dedupe_trough_variants(cls, v):
-        if not v:
-            return v
-        s = set(v)
-        specific = {
-            "Trough level - ~11 hours post-dose for apixaban and dabigatran",
-            "Trough level - ~23 hours post-dose for rivaroxaban and edoxaban",
-        }
-        generic = "Trough level (just prior to next dose)"
-        # If any specific trough is present, drop the generic trough
-        if s & specific and generic in s:
-            s.remove(generic)
-        # Return in original order, filtered
-        return [x for x in v if x in s]
-
     timing_of_measurement_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Timing of DOAC Level Measurement Relative to DOAC Intake Sentence from Text",
-        description="Exact sentences with the timing of DOAC level measurement relative to DOAC intake.",
+        description="Exact sentences or paragraph containing the timing of DOAC level measurement relative to DOAC intake.",
     )
 
     # A) thresholds the paper LISTS anywhere in its methods/results
@@ -650,8 +705,22 @@ class ExtractionOutcomes(BaseModel):
         default=None,
         alias="Reported DOAC concentration thresholds/cutoffs (listed)",
         description=(
-            "Thresholds/cutoffs explicitly listed by the study (methods/results). "
-            "Include only if stated for this study (not background)."
+            "CRITICAL: Include ALL numeric DOAC concentration thresholds/cutoffs explicitly listed by the study "
+            "in Methods/Results (e.g., 30 ng/mL, 50 ng/mL, 75 ng/mL, 100 ng/mL). "
+            "Include only if stated for THIS study (not background or external references).\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods/Results that list numeric thresholds.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, extract all numeric thresholds mentioned.\n\n"
+            "Include a threshold if it appears as:\n"
+            "• A numeric value with units (e.g., '30 ng/mL', '50 ng/mL')\n"
+            "• A cutoff used for analysis, outcomes, or clinical management\n"
+            "• Listed in tables, figures, or text in Methods/Results\n\n"
+            "Use 'Other' for thresholds that are numeric but not one of the standard values (30, 50, 75, 100 ng/mL).\n\n"
+            "Do NOT include if:\n"
+            "• Thresholds are mentioned only in Introduction/Discussion as background.\n"
+            "• Thresholds are from external studies or guidelines without application to THIS study.\n\n"
+            "This field captures ALL thresholds mentioned; separate fields track their specific uses "
+            "(clinical outcomes vs clinical management)."
         ),
     )
 
@@ -683,39 +752,47 @@ class ExtractionOutcomes(BaseModel):
                 "100 ng/mL – Emergency surgery",
                 "100 ng/mL – Major bleeding and anticoagulation reversal",
                 "100 ng/mL – Thrombolysis/acute stroke",
-                # Other
-                "Other – Overall",
-                "Other – Elective surgery",
-                "Other – Emergency surgery",
-                "Other – Major bleeding and anticoagulation reversal",
-                "Other – Thrombolysis/acute stroke",
             ]
         ]
     ] = Field(
         default=None,
         alias="Thresholds used to inform clinical management",
         description=(
-            "Flattened list of threshold × context pairs explicitly used by the study to guide care. "
-            "Include only if the manuscript states the threshold was applied to clinical decisions."
+            "CRITICAL: This field tracks thresholds used to GUIDE CLINICAL DECISIONS (management), NOT thresholds used "
+            "to evaluate associations with clinical outcomes. Distinguish between:\n"
+            "• Clinical MANAGEMENT = thresholds used to guide care (surgery timing, reversal, thrombolysis eligibility)\n"
+            "• Clinical OUTCOMES = thresholds used to evaluate associations (bleeding risk, thrombosis risk)\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods/Results that describe how the threshold was used "
+            "to guide clinical decisions. Look for explicit statements like:\n"
+            "  - 'Surgery was delayed if level >30 ng/mL'\n"
+            "  - 'Thrombolysis was withheld if level exceeded 50 ng/mL'\n"
+            "  - 'Reversal was administered when level was >30 ng/mL'\n"
+            "  - 'Patients with level <50 ng/mL proceeded to surgery'\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the threshold × context pair.\n\n"
+            "Include a threshold × context pair ONLY if:\n"
+            "1) The manuscript explicitly states the threshold was applied to guide clinical decisions "
+            "   (surgery timing, reversal administration, thrombolysis eligibility, dose adjustment, etc.).\n"
+            "2) The threshold was used in actual clinical decision-making, not just for analysis/performance evaluation.\n\n"
+            "Do NOT include thresholds if:\n"
+            "• They are used purely for analysis/performance (e.g., ROC cut-offs, sensitivity/specificity calculations).\n"
+            "• They are used to evaluate associations with clinical outcomes (e.g., 'bleeding risk was higher at levels >100 ng/mL') "
+            "   → These are outcome associations, not management decisions.\n"
+            "• They are mentioned only as background or hypothetical thresholds without explicit application to clinical decisions.\n"
+            "• They are proposed but not actually used to guide care in the study.\n\n"
+            "Context categories:\n"
+            "• 'Overall' = threshold used for general clinical management without specific context\n"
+            "• 'Elective surgery' = threshold used to guide timing/clearance for planned procedures\n"
+            "• 'Emergency surgery' = threshold used to guide proceed/cancel decisions for urgent procedures\n"
+            "• 'Major bleeding and anticoagulation reversal' = threshold used to guide reversal administration\n"
+            "• 'Thrombolysis/acute stroke' = threshold used to determine lytic eligibility\n\n"
+            "If the article does not clearly state that thresholds were used to inform clinical management, leave null. Do NOT guess."
         ),
     )
     thresholds_used_for_management_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Thresholds used to inform clinical management Sentence from Text",
-        description="Exact sentences with the thresholds used to inform clinical management.",
-    )
-    thresholds_used_for_management_other_category_details: Optional[List[str]] = Field(
-        default=None,
-        alias="Thresholds used to inform clinical management - Other category details",
-        description=(
-            "ONLY populate this if the study reports a threshold used for clinical decision-making that "
-            "does NOT fall into any pre-specified threshold category.\n\n"
-            "Extract the *exact sentence(s)* or *verbatim clause* from the Methods/Results that describe the "
-            "non-standard threshold (e.g., surgical team used 30–40 ng/mL for neuraxial anesthesia despite "
-            "not specifying calibrated assay criteria).\n\n"
-            "These verbatim extracts will later be exported and grouped in Excel to characterize the ‘Other’ "
-            "bucket for narrative synthesis — so preserve wording precisely, no interpretation or rewriting."
-        ),
+        description="Exact sentences or paragraph confirming that the thresholds were used to inform clinical management.",
     )
 
     # Turnaround Time
@@ -734,6 +811,32 @@ class ExtractionOutcomes(BaseModel):
         ),
     )
 
+    # Clinical Outcomes Measured?
+    clinical_outcomes_measured: Optional[Literal["Yes", "No"]] = Field(
+        default=None,
+        alias="Clinical outcomes measured?",
+        description=(
+            "CRITICAL GATE for ALL clinical outcome fields. This field controls whether ANY outcome-related fields should be populated.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Search Methods and Results sections ONLY (NOT Introduction, Abstract, or Discussion). "
+            "Quote exact sentences that state the study recorded/assessed/evaluated clinical events.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify.\n\n"
+            "Set to 'Yes' ONLY if BOTH conditions are met:\n"
+            "1) The Methods explicitly state that clinical events were recorded/assessed/evaluated as outcomes "
+            "   (look for phrases like 'we recorded', 'we assessed', 'we evaluated', 'we defined events as...', "
+            "   'primary/secondary endpoints', 'outcomes included').\n"
+            "2) The Results section reports actual clinical events or explicitly states 'no events occurred'.\n\n"
+            "Set to 'No' if:\n"
+            "• Outcomes are mentioned only in Introduction/Background (e.g., 'AF is associated with increased stroke risk').\n"
+            "• Outcomes are from an underlying registry or external trial, not THIS study.\n"
+            "• The study describes planned follow-up but no actual events are reported in Results.\n"
+            "• Only baseline characteristics or risk factors are discussed, not actual outcomes.\n\n"
+            "CONSISTENCY RULE: If this field = 'No', then ALL outcome-related fields (clinical_outcomes, "
+            "clinical_outcome_followup_flat, clinical_outcome_definition_flat) MUST be null/NA.\n\n"
+            "If unclear after checking Methods and Results, set to null and leave all outcome-related fields null."
+        ),
+    )
+
     # Clinical Outcomes
     clinical_outcomes: Optional[
         List[
@@ -749,14 +852,27 @@ class ExtractionOutcomes(BaseModel):
         default=None,
         alias="Clinical Outcomes",
         description=(
-            "Outcomes that were explicitly measured in THIS study (described in Methods and reported in Results). "
-            "Do NOT include outcomes only mentioned in Introduction/Discussion."
+            "CRITICAL: Only populate if 'Clinical outcomes measured?' = 'Yes'. "
+            "If 'Clinical outcomes measured?' = 'No', this field MUST be null.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods AND Results (NOT Introduction/Discussion) "
+            "that describe the outcome being measured and reported.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the outcome type.\n\n"
+            "Include an outcome ONLY if:\n"
+            "1) The Methods explicitly states it was recorded/assessed/evaluated as an outcome.\n"
+            "2) The Results section reports actual events OR explicitly states 'no events occurred'.\n\n"
+            "Do NOT include outcomes if:\n"
+            "• They appear only in Introduction/Background (e.g., 'AF is associated with increased stroke risk').\n"
+            "• They are from an underlying registry or external trial, not THIS study.\n"
+            "• Only baseline descriptions or planned follow-up are mentioned without actual events in Results.\n"
+            "• Generic risk statements exist without explicit outcome measurement.\n\n"
+            "If no clinical outcomes were measured (gate = 'No'), leave this field null."
         ),
     )
     clinical_outcomes_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Clinical Outcomes Sentence from Text",
-        description="Exact sentences confirming that the outcome(s) were measured and reported in this study.",
+        description="Exact sentences or paragraph confirming that the outcome(s) were measured and reported in this study.",
     )
 
     # ---- Per-outcome follow-up duration (verbatim) ----
@@ -787,20 +903,32 @@ class ExtractionOutcomes(BaseModel):
         default=None,
         alias="Clinical Outcome - follow-up duration",
         description=(
-            "Select ONLY if BOTH conditions are true in THIS study:\n"
-            "1) The outcome (Bleeding, Stroke/TIA, PE/DVT) was explicitly measured as an endpoint "
-            "   (i.e., described in Methods AND reported in Results — NOT just mentioned in Introduction/Discussion).\n"
-            "2) The follow-up window for outcome ascertainment was explicitly reported (e.g., '30 days', '3 months').\n\n"
-            "Choose the single literal that matches the outcome + duration category. "
-            "If duration not reported → do NOT select any value for that outcome. "
-            "If multiple outcomes in the same study report different durations → include multiple literals.\n\n"
-            "Do NOT infer, map, or approximate. ONLY assign when the study directly reports both outcome + duration."
+            "CRITICAL: Only populate if 'Clinical outcomes measured?' = 'Yes'. "
+            "If 'Clinical outcomes measured?' = 'No', this field MUST be null.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods AND Results (NOT Introduction/Discussion) "
+            "that explicitly describe how long patients were followed for clinical events. "
+            "Look for phrases like 'Patients were followed for X...', 'Follow-up period was X...', "
+            "'Observation period of X...', 'Outcomes were assessed at X...'.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the follow-up duration.\n\n"
+            "Include a follow-up duration ONLY if:\n"
+            "1) The outcome was explicitly measured (see 'Clinical outcomes' field).\n"
+            "2) There is an explicit description of follow-up duration in Methods or Results "
+            "   (e.g., 'Patients were followed for 6 months...', 'Follow-up was 30 days...').\n\n"
+            "Do NOT include follow-up duration if:\n"
+            "• The study mentions imaging or days of observation but does NOT explicitly state follow-up for clinical events.\n"
+            "• Follow-up is inferred from a different cohort (e.g., underlying registry) rather than THIS study.\n"
+            "• Only baseline characteristics or planned follow-up are mentioned without explicit duration for outcome ascertainment.\n"
+            "• The duration is mentioned in Introduction/Discussion but not in Methods/Results.\n\n"
+            "If duration is not explicitly reported for an outcome, do NOT select any value for that outcome. "
+            "If multiple outcomes have different durations, include multiple literals.\n\n"
+            "Do NOT infer, map, or approximate. ONLY assign when the study directly reports both outcome measurement AND explicit follow-up duration."
         ),
     )
     clinical_outcome_followup_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Clinical Outcome - follow-up duration Sentence from Text",
-        description="Exact sentences with the clinical outcome follow-up duration.",
+        description="Exact sentences or paragraph containing the clinical outcome follow-up duration.",
     )
 
     # ---- Per-outcome definition notes (verbatim) ----
@@ -819,6 +947,7 @@ class ExtractionOutcomes(BaseModel):
                 "Bleeding/Hemostasis – CRUSADE",
                 "Bleeding/Hemostasis – ACUITY/HORIZONS",
                 "Bleeding/Hemostasis – Other definition",
+                "Bleeding/Hemostasis – Not defined/not described",
                 # Stroke / TIA
                 "Thromboembolism – Stroke/TIA – Defined",
                 "Thromboembolism – Stroke/TIA – Not defined/not described",
@@ -831,20 +960,196 @@ class ExtractionOutcomes(BaseModel):
         default=None,
         alias="Clinical Outcome - definition",
         description=(
-            "Select ONLY if the study explicitly defined how this outcome was adjudicated.\n"
-            "Bleeding/Hemostasis → pick the exact definition taxonomy used.\n"
-            "Stroke/TIA and PE/DVT → choose 'Defined' only if the study clearly cites objective clinical "
-            "and/or imaging criteria or formal guideline/adjudication standard.\n\n"
+            "CRITICAL: Only populate if 'Clinical outcomes measured?' = 'Yes'. "
+            "If 'Clinical outcomes measured?' = 'No', this field MUST be null.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods (NOT Introduction/Discussion) "
+            "that explicitly define the outcome. Look for phrases like 'Major bleeding was defined as...', "
+            "'Stroke was defined as...', 'We used the ISTH definition...', 'Outcomes were adjudicated according to...'.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the definition.\n\n"
+            "Include an outcome definition ONLY if:\n"
+            "1) The outcome was explicitly measured (see 'Clinical outcomes' field).\n"
+            "2) The paper gives at least one sentence beginning with explicit definition language "
+            "   (e.g., 'Major bleeding was defined as...', 'Stroke was defined as...', "
+            "   'We used the [ISTH/BARC/TIMI/etc.] definition...').\n\n"
+            "For Bleeding/Hemostasis: Pick the exact definition taxonomy used (ISTH, BARC, TIMI, etc.). "
+            "If a specific taxonomy is cited but not detailed, select that taxonomy. "
+            "If no taxonomy is cited and no explicit definition is given, select 'Not defined/not described'.\n\n"
+            "For Stroke/TIA and PE/DVT: Choose 'Defined' only if the study clearly cites:\n"
+            "• Objective clinical criteria (e.g., NIHSS, modified Rankin Scale).\n"
+            "• Imaging criteria (e.g., CT/MRI findings).\n"
+            "• Formal guideline/adjudication standard (e.g., WHO, TOAST classification).\n"
+            "If no explicit criteria or standard is cited, select 'Not defined/not described'.\n\n"
             "Do NOT assign any value if:\n"
-            "• The outcome was only mentioned narratively (e.g., in Background) AND not measured in Results.\n"
-            "• The study reported the outcome but did not provide ANY definition or diagnostic criteria.\n\n"
+            "• The outcome was only mentioned narratively in Background/Introduction AND not measured in Results.\n"
+            "• The study reported the outcome but did not provide ANY definition or diagnostic criteria.\n"
+            "• Definitions are mentioned in Discussion but not in Methods.\n"
+            "• The study infers follow-up or definitions where the study doesn't actually define outcomes.\n\n"
             "Multiple selections allowed if multiple outcome domains in THIS study each have explicit definitions."
         ),
     )
     clinical_outcome_definition_sentence_from_text: Optional[List[str]] = Field(
         default=None,
         alias="Clinical Outcome - definition Sentence from Text",
-        description="Exact sentences with the clinical outcome definition.",
+        description="Exact sentences or paragraph confirming that the outcome(s) were measured and reported in this study.",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+# ------------------------------------
+# 5) Diagnostic Performance Metrics
+# ------------------------------------
+class ExtractionDiagnosticPerformance(BaseModel):
+    """
+    Guidelines:
+    1) Do not infer or guess.
+    2) Use null if unsure.
+    3) Output only facts explicitly in the PDF.
+    4) If ambiguous, set null (do not guess).
+    5) Numeric values must be exact.
+    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    7) Do not use external knowledge.
+    8) Ignore References and Acknowledgments content.
+    """
+
+    # Diagnostic performance metrics for categorical cutoffs
+    diagnostic_performance_categorical: Optional[
+        List[
+            Literal[
+                "Sensitivity",
+                "Specificity",
+                "Positive Predictive Value (PPV)",
+                "Negative Predictive Value (NPV)",
+            ]
+        ]
+    ] = Field(
+        default=None,
+        alias="Diagnostic Performance Metrics - Categorical Cutoffs",
+        description=(
+            "CRITICAL: Only populate if the study reports diagnostic performance metrics for categorical cutoffs "
+            "(e.g., ≥30 ng/mL vs <30 ng/mL) comparing a comparator assay to DOAC level measurement.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods/Results that report sensitivity, specificity, "
+            "PPV, or NPV for categorical cutoffs comparing comparator assays (PT, aPTT, TT, dTT, heparin-calibrated anti-Xa, "
+            "viscoelastic testing, thrombin generation) to DOAC level thresholds.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify which metrics were reported.\n\n"
+            "Include a metric ONLY if:\n"
+            "1) It is explicitly reported in Results (not just mentioned in Discussion/Background).\n"
+            "2) It compares a comparator assay to a DOAC level threshold (e.g., 'sensitivity of PT >1.2× normal "
+            "for detecting DOAC level ≥30 ng/mL was 85%').\n\n"
+            "Common comparator assays:\n"
+            "• Conventional coagulation tests: PT, aPTT, TT, dTT\n"
+            "• Heparin-calibrated anti-Xa assays (IU/mL)\n"
+            "• Viscoelastic testing (ROTEM/TEG)\n"
+            "• Thrombin generation assays (TGA)\n\n"
+            "Do NOT include if:\n"
+            "• Metrics are reported only for assay validation (e.g., LC-MS vs calibrated anti-Xa) without categorical cutoffs.\n"
+            "• Only correlation coefficients are reported (those belong in 'Diagnostic Performance Metrics - Continuous Relationships').\n"
+            "• Metrics are mentioned in Discussion but not explicitly reported in Results.\n\n"
+            "If the article does not clearly report categorical diagnostic performance metrics, leave null. Do NOT guess."
+        ),
+    )
+    diagnostic_performance_categorical_sentence_from_text: Optional[List[str]] = Field(
+        default=None,
+        alias="Diagnostic Performance Metrics - Categorical Cutoffs Sentence from Text",
+        description="Exact sentences or paragraph containing the categorical diagnostic performance metrics.",
+    )
+
+    # Diagnostic performance metrics for continuous relationships
+    diagnostic_performance_continuous: Optional[
+        List[
+            Literal[
+                "Spearman correlation coefficient",
+                "Pearson correlation coefficient",
+            ]
+        ]
+    ] = Field(
+        default=None,
+        alias="Diagnostic Performance Metrics - Continuous Relationships",
+        description=(
+            "CRITICAL: Only populate if the study reports correlation coefficients comparing a comparator assay "
+            "to DOAC level measurement as continuous variables.\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods/Results that report Spearman or Pearson "
+            "correlation coefficients comparing comparator assays (PT, aPTT, TT, dTT, heparin-calibrated anti-Xa, "
+            "viscoelastic testing, thrombin generation) to DOAC levels as continuous variables.\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify which correlation coefficient was reported.\n\n"
+            "Include a correlation coefficient ONLY if:\n"
+            "1) It is explicitly reported in Results with a numeric value (not just mentioned in Discussion/Background).\n"
+            "2) It compares a comparator assay to DOAC levels as continuous variables (e.g., 'Spearman correlation "
+            "between PT and rivaroxaban level was 0.65').\n\n"
+            "Common comparator assays:\n"
+            "• Conventional coagulation tests: PT, aPTT, TT, dTT\n"
+            "• Heparin-calibrated anti-Xa assays (IU/mL)\n"
+            "• Viscoelastic testing (ROTEM/TEG)\n"
+            "• Thrombin generation assays (TGA)\n\n"
+            "Do NOT include if:\n"
+            "• Only categorical metrics (sensitivity/specificity) are reported (those belong in 'Diagnostic Performance Metrics - Categorical Cutoffs').\n"
+            "• Correlation is mentioned qualitatively without a numeric coefficient.\n"
+            "• Correlation is mentioned in Discussion but not explicitly reported in Results.\n\n"
+            "If the article does not clearly report continuous correlation coefficients, leave null. Do NOT guess."
+        ),
+    )
+    diagnostic_performance_continuous_sentence_from_text: Optional[List[str]] = Field(
+        default=None,
+        alias="Diagnostic Performance Metrics - Continuous Relationships Sentence from Text",
+        description="Exact sentences or paragraph containing the continuous diagnostic performance metrics.",
+    )
+
+    # Comparator assays used for diagnostic performance evaluation
+    comparator_assays: Optional[
+        List[
+            Literal[
+                "Coagulation testing - Prothrombin time (PT)",
+                "Coagulation testing - Activated partial thromboplastin time (aPTT)",
+                "Coagulation testing - Dilute thrombin time (dTT)",
+                "Coagulation testing - Thrombin Time (TT)",
+                "Anti-Xa assays with LMWH calibrators (IU/mL)",
+                "Viscoelastic testing",
+                "Thrombin generation assays",
+            ]
+        ]
+    ] = Field(
+        default=None,
+        alias="Comparator Assays",
+        description=(
+            "CRITICAL: Only populate if the study reports diagnostic performance metrics comparing comparator assays "
+            "to DOAC level measurement. This includes BOTH categorical cutoffs (sensitivity, specificity, PPV, NPV) "
+            "AND continuous relationships (Spearman/Pearson correlation coefficients).\n\n"
+            "Two-step process:\n"
+            "Step 1 (Evidence): Quote exact sentences from Methods/Results that identify which comparator assays were evaluated. "
+            "Look for:\n"
+            "  - Categorical cutoffs: 'sensitivity of PT >1.2× normal for detecting DOAC level ≥30 ng/mL', "
+            "'specificity of aPTT >40s for detecting DOAC level ≥50 ng/mL'\n"
+            "  - Continuous relationships: 'Spearman correlation between PT and rivaroxaban level was 0.65', "
+            "'Pearson correlation coefficient for aPTT vs apixaban concentration was 0.72'\n"
+            "Step 2 (Decision): Based ONLY on those quoted sentences, classify which comparator assays were used.\n\n"
+            "Include a comparator assay ONLY if:\n"
+            "1) It is explicitly identified in Methods/Results as being evaluated for diagnostic performance.\n"
+            "2) Diagnostic performance metrics are reported for that comparator assay:\n"
+            "   - Categorical: sensitivity, specificity, PPV, or NPV for categorical cutoffs\n"
+            "   - Continuous: Spearman or Pearson correlation coefficient\n"
+            "3) The comparison is to DOAC level measurement (not assay validation like LC-MS vs calibrated anti-Xa).\n\n"
+            "Comparator assay categories:\n"
+            "• 'Coagulation testing - Prothrombin time (PT)' = PT/INR used as comparator\n"
+            "• 'Coagulation testing - Activated partial thromboplastin time (aPTT)' = aPTT used as comparator\n"
+            "• 'Coagulation testing - Dilute thrombin time (dTT)' = dTT used as comparator (for dabigatran)\n"
+            "• 'Coagulation testing - Thrombin Time (TT)' = TT used as comparator (for dabigatran)\n"
+            "• 'Anti-Xa assays with LMWH calibrators (IU/mL)' = Heparin-calibrated anti-Xa assays (not DOAC-specific) used as comparator\n"
+            "• 'Viscoelastic testing' = ROTEM/TEG/viscoelastic testing used as comparator\n"
+            "• 'Thrombin generation assays' = TGA/CAT/thrombin generation used as comparator\n\n"
+            "Do NOT include if:\n"
+            "• Comparator assays are mentioned but no diagnostic performance metrics are reported.\n"
+            "• The comparison is for assay validation (e.g., LC-MS vs calibrated anti-Xa) without diagnostic performance metrics.\n"
+            "• Only qualitative statements about correlation exist without numeric metrics.\n\n"
+            "If the article does not clearly identify which comparator assays were used for diagnostic performance evaluation, leave null. Do NOT guess."
+        ),
+    )
+    comparator_assays_sentence_from_text: Optional[List[str]] = Field(
+        default=None,
+        alias="Comparator Assays Sentence from Text",
+        description="Exact sentences or paragraph identifying which comparator assays were used for diagnostic performance evaluation.",
     )
 
     model_config = ConfigDict(populate_by_name=True)
