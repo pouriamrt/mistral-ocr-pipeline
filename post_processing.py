@@ -198,12 +198,6 @@ def validate_field_with_llm(
         )
         return row
 
-    # Expected shape:
-    # {
-    #   "is_list": true/false,
-    #   "supported": [bool...] or bool,
-    #   "notes": "..."
-    # }
     supported = result.get("supported")
 
     if cfg.is_list:

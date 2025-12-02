@@ -8,6 +8,7 @@ from loguru import logger
 import sys
 from tqdm import tqdm
 from mistralai import Mistral
+from rich.traceback import install
 
 from to_markdown import convert_to_markdown
 from get_annotations import run_all_payloads
@@ -22,6 +23,7 @@ from utils import (
     ParquetAppender,
 )
 
+install(show_locals=True)
 load_dotenv(override=True)
 
 OUTPUT_DIR = Path("output")
