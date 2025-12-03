@@ -2,14 +2,23 @@ from dataclasses import dataclass
 from typing import List, Any, Optional
 
 import json
+import os
+from math import ceil
+import ast
+
 import pandas as pd
 from tqdm import tqdm
+from dotenv import load_dotenv
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
 
+
+load_dotenv(override=True)
+
+MODEL = os.getenv("MODEL_JUDGE", "gpt-5-mini")
 
 # ------------------------------
 # Config for which fields to check
@@ -18,19 +27,13 @@ from langchain_openai import ChatOpenAI
 
 @dataclass
 class FieldValidationConfig:
-    # Column that contains the extracted value(s)
     value_field: str
-    # Column that contains the supporting sentence(s)
     sentence_field: str
-    # True if the value is a list (multi-label); False for scalar
     is_list: bool = True
-    # Name/description of this field for the LLM
     field_label: str = ""
-    # Optional: if you want the LLM to be slightly more lenient/strict later
     required_strength: str = "clear"
 
 
-# Example configs – adapt to your exact column names
 DEFAULT_FIELD_CONFIGS: List[FieldValidationConfig] = [
     FieldValidationConfig(
         value_field="DOAC Level Measurement",
@@ -65,9 +68,8 @@ def make_validator_chain(model: Optional[Runnable] = None) -> Runnable:
     returns JSON with booleans indicating whether each value is supported by the sentence.
     """
     if model is None:
-        # You can tweak temperature / model here
         model = ChatOpenAI(
-            model="gpt-4.1-mini",
+            model=MODEL,
             temperature=0.0,
         )
 
@@ -98,7 +100,8 @@ def make_validator_chain(model: Optional[Runnable] = None) -> Runnable:
                     "{values_json}\n\n"
                     "Supporting sentences (same order, JSON array or scalar):\n"
                     "{sentences_json}\n\n"
-                    "For each value, decide if it is supported by its corresponding sentence.\n"
+                    "For each value, decide if it is supported by its corresponding sentence. "
+                    "If values and sentences are lists, check value[i] against sentence[i] for each index i.\n"
                     "Respond ONLY with JSON of the form:\n"
                     "{{\n"
                     '  "is_list": true | false,\n'
@@ -116,28 +119,32 @@ def make_validator_chain(model: Optional[Runnable] = None) -> Runnable:
 
 
 # ------------------------------
-# Row-level validation logic
+# Normalization helpers
 # ------------------------------
 
 
 def _normalize_scalar_or_list(v: Any, expect_list: bool) -> List[Any] | Any:
     """
     Ensure values and sentences are in compatible shapes.
+    Also handles Python-list-like strings such as "['a', 'b']".
     """
     if v is None:
         return [] if expect_list else None
+
     if expect_list:
         if isinstance(v, list):
             return v
-        # sometimes they come in as a stringified list
+
         if isinstance(v, str):
             try:
-                parsed = json.loads(v)
+                parsed = ast.literal_eval(v)
                 if isinstance(parsed, list):
                     return parsed
             except Exception:
                 pass
+
         return [v]
+
     else:
         # scalar expected
         if isinstance(v, list):
@@ -146,108 +153,91 @@ def _normalize_scalar_or_list(v: Any, expect_list: bool) -> List[Any] | Any:
                 if item not in (None, "", [], {}):
                     return item
             return None
+
+        if isinstance(v, str):
+            try:
+                parsed = ast.literal_eval(v)
+                if not isinstance(parsed, list):
+                    return parsed
+            except Exception:
+                pass
+
         return v
 
 
-def validate_field_with_llm(
+def _apply_llm_result_to_row(
     row: pd.Series,
     cfg: FieldValidationConfig,
-    chain: Runnable,
-    row_id: Any,
+    values: Any,
+    sentences: Any,
+    result: dict,
 ) -> pd.Series:
     """
-    Validate one field in one row with the LLM, updating the row in-place.
+    Given an LLM result JSON for one row and field, return a copy of the row
+    with sentences kept and unsupported values removed/nulled out.
     """
-    values_raw = row.get(cfg.value_field)
-    sentences_raw = row.get(cfg.sentence_field)
-
-    # If value is empty, nothing to do
-    if values_raw in (None, "", [], {}):
-        return row
-
-    values = _normalize_scalar_or_list(values_raw, cfg.is_list)
-    sentences = _normalize_scalar_or_list(sentences_raw, cfg.is_list)
-
-    # If we don't have sentences, we can't validate – keep as-is
-    if sentences in (None, "", [], {}):
-        return row
-
-    # For lists, lengths must match for 1:1 mapping; if not, leave as-is
-    if cfg.is_list and isinstance(values, list) and isinstance(sentences, list):
-        if len(values) != len(sentences):
-            # optional: log somewhere; for now, skip validation
-            return row
-
-    # Prepare JSON for the LLM
-    values_json = json.dumps(values, ensure_ascii=False)
-    sentences_json = json.dumps(sentences, ensure_ascii=False)
-
-    try:
-        result = chain.invoke(
-            {
-                "field_label": cfg.field_label or cfg.value_field,
-                "row_id": str(row_id),
-                "values_json": values_json,
-                "sentences_json": sentences_json,
-            }
-        )
-    except Exception as e:
-        # If LLM fails, keep original
-        print(
-            f"[WARN] LLM validation failed for field '{cfg.value_field}' row {row_id}: {e}"
-        )
-        return row
-
     supported = result.get("supported")
+    row_copy = row.copy()
 
     if cfg.is_list:
-        if not isinstance(values, list) or not isinstance(supported, list):
-            return row
-        if len(values) != len(supported):
-            return row
+        if not isinstance(values, list) or not isinstance(sentences, list):
+            return row_copy
+        if not isinstance(supported, list):
+            return row_copy
+        if len(values) != len(sentences) or len(values) != len(supported):
+            return row_copy
 
-        # Filter out unsupported items
-        new_values = []
-        new_sentences = []
-        for v, s, ok in zip(values, sentences, supported):
+        # Keep all sentences unchanged, but filter out unsupported values
+        # Filter out None values to avoid ['None'] in output
+        filtered_values = []
+        for v, ok in zip(values, supported):
+            # Only keep the value if it's supported
             if ok:
-                new_values.append(v)
-                new_sentences.append(s)
+                filtered_values.append(v)
 
-        if new_values:
-            row[cfg.value_field] = new_values
-            row[cfg.sentence_field] = new_sentences
-        else:
-            row[cfg.value_field] = None
-            row[cfg.sentence_field] = None
+        # Set to empty list if all values were filtered out, otherwise use filtered list
+        # Keep sentences unchanged as requested
+        row_copy[cfg.value_field] = filtered_values if filtered_values else None
+        row_copy[cfg.sentence_field] = sentences if sentences else None
 
     else:
         # scalar case
         if isinstance(supported, list):
             # take first if provided oddly
             supported = bool(supported[0]) if supported else False
-        if not supported:
-            row[cfg.value_field] = None
-            row[cfg.sentence_field] = None
 
-    return row
+        # Always keep the sentence for scalar case
+        # Only remove the value if not supported
+        if not supported:
+            row_copy[cfg.value_field] = None
+        # Keep the sentence field as-is
+
+    return row_copy
+
+
+# ------------------------------
+# DataFrame-level batched validation
+# ------------------------------
 
 
 def validate_dataframe_with_llm(
     df: pd.DataFrame,
     field_configs: List[FieldValidationConfig] | None = None,
     model: Optional[Runnable] = None,
+    batch_size: int = 16,
 ) -> pd.DataFrame:
     """
-    Run LLM-based validation over all rows and configured fields.
+    Run LLM-based validation over all rows and configured fields, using batched
+    LLM calls (chain.batch).
+
     Returns a new DataFrame with invalid values nulled out.
     """
     if field_configs is None:
         field_configs = DEFAULT_FIELD_CONFIGS
 
     chain = make_validator_chain(model=model)
-
     df_validated = df.copy()
+
     for cfg in field_configs:
         missing_cols = [
             c
@@ -260,12 +250,91 @@ def validate_dataframe_with_llm(
             )
             continue
 
-        print(f"[INFO] Validating field '{cfg.value_field}' using LLM...")
-        rows = []
-        for idx, row in tqdm(df_validated.iterrows(), total=len(df_validated)):
-            row = validate_field_with_llm(row, cfg, chain, row_id=idx)
-            rows.append(row)
+        print(f"[INFO] Validating field '{cfg.value_field}' using LLM (batched)...")
 
-        df_validated = pd.DataFrame(rows)
+        # Build inputs and metadata for rows that actually need validation
+        inputs = []  # list of dicts to feed into chain.batch
+        meta = []  # parallel list: (row_index, values, sentences)
+
+        for idx, row in df_validated.iterrows():
+            values_raw = row.get(cfg.value_field)
+            sentences_raw = row.get(cfg.sentence_field)
+
+            # If value is empty, nothing to do
+            if values_raw in (None, "", [], {}):
+                continue
+
+            values = _normalize_scalar_or_list(values_raw, cfg.is_list)
+            sentences = _normalize_scalar_or_list(sentences_raw, cfg.is_list)
+
+            # If we don't have sentences, we can't validate – keep as-is
+            if sentences in (None, "", [], {}):
+                continue
+
+            # For lists, lengths must match for 1:1 mapping; if not, leave as-is
+            if cfg.is_list and isinstance(values, list) and isinstance(sentences, list):
+                if len(values) != len(sentences):
+                    # skip this row for validation
+                    continue
+
+            values_json = json.dumps(values, ensure_ascii=False)
+            sentences_json = json.dumps(sentences, ensure_ascii=False)
+
+            inputs.append(
+                {
+                    "field_label": cfg.field_label or cfg.value_field,
+                    "row_id": str(idx),
+                    "values_json": values_json,
+                    "sentences_json": sentences_json,
+                }
+            )
+            meta.append((idx, values, sentences))
+
+        if not inputs:
+            # nothing to validate for this field
+            continue
+
+        total = len(inputs)
+        num_batches = ceil(total / batch_size)
+        all_results: List[Optional[dict]] = []
+
+        for b in tqdm(
+            range(num_batches),
+            desc=f"LLM batches for {cfg.value_field}",
+        ):
+            start = b * batch_size
+            end = min((b + 1) * batch_size, total)
+            batch_inputs = inputs[start:end]
+
+            try:
+                batch_results = chain.batch(batch_inputs)
+            except Exception as e:
+                print(
+                    f"[WARN] LLM batch failed for field '{cfg.value_field}' "
+                    f"batch {b + 1}/{num_batches}: {e}"
+                )
+                # Fill with None so lengths stay aligned
+                batch_results = [None] * len(batch_inputs)
+
+            all_results.extend(batch_results)
+
+        # Apply results back to df_validated
+        for (idx, values, sentences), result in zip(meta, all_results):
+            if result is None:
+                # skip this row on error
+                continue
+            row = df_validated.loc[idx]
+            row = _apply_llm_result_to_row(row, cfg, values, sentences, result)
+            df_validated.loc[idx] = row
 
     return df_validated
+
+
+if __name__ == "__main__":
+    df = pd.read_csv("output/aggregated/df_annotations.csv")
+    df = df.iloc[:10]
+    df_validated = validate_dataframe_with_llm(df, batch_size=16)
+    df_validated.to_csv(
+        "output/aggregated/df_annotations_validated.csv",
+        index=False,
+    )
