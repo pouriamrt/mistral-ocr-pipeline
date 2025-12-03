@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import List, Any, Optional
 
 import json
@@ -15,6 +14,8 @@ from langchain_core.runnables import Runnable
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
 
+from unstack_payloads import get_all_field_configs, FieldValidationConfig
+
 
 load_dotenv(override=True)
 
@@ -24,37 +25,7 @@ MODEL = os.getenv("MODEL_JUDGE", "gpt-5-mini")
 # Config for which fields to check
 # ------------------------------
 
-
-@dataclass
-class FieldValidationConfig:
-    value_field: str
-    sentence_field: str
-    is_list: bool = True
-    field_label: str = ""
-    required_strength: str = "clear"
-
-
-DEFAULT_FIELD_CONFIGS: List[FieldValidationConfig] = [
-    FieldValidationConfig(
-        value_field="DOAC Level Measurement",
-        sentence_field="DOAC Level Measurement Sentence from Text",
-        is_list=True,
-        field_label="DOAC level measurement methods",
-    ),
-    FieldValidationConfig(
-        value_field="Clinical Outcomes",
-        sentence_field="Clinical Outcomes Sentence from Text",
-        is_list=True,
-        field_label="clinical outcomes",
-    ),
-    FieldValidationConfig(
-        value_field="Patient population 3",  # relevant_subgroups
-        sentence_field="Relevant Subgroups Sentence from Text",
-        is_list=True,
-        field_label="relevant patient subgroups",
-    ),
-    # add more configs as needed ...
-]
+DEFAULT_FIELD_CONFIGS = get_all_field_configs()
 
 
 # ------------------------------
@@ -78,7 +49,7 @@ def make_validator_chain(model: Optional[Runnable] = None) -> Runnable:
             (
                 "system",
                 (
-                    "You are a strict scientific validator. Your job is to check whether "
+                    "You are a scientific validator. Your job is to check whether "
                     "specific extracted values are REALLY supported by the evidence sentences.\n\n"
                     "Rules:\n"
                     "1. Only use the provided sentences as evidence; ignore any outside knowledge.\n"
@@ -86,9 +57,8 @@ def make_validator_chain(model: Optional[Runnable] = None) -> Runnable:
                     "applies to THIS study's own patients/measurements.\n"
                     "3. If the sentence is background, refers to other studies, guidelines, or "
                     "general statements (not specifically 'we measured', 'in this study', etc.), "
-                    "then the value is NOT supported.\n"
-                    "4. When unsure, mark the value as not supported.\n\n"
-                    "Output STRICT JSON with booleans as described."
+                    "then the value is NOT supported.\n\n"
+                    "Output JSON with booleans as described."
                 ),
             ),
             (
@@ -332,7 +302,7 @@ def validate_dataframe_with_llm(
 
 if __name__ == "__main__":
     df = pd.read_csv("output/aggregated/df_annotations.csv")
-    df = df.iloc[:10]
+    # df = df.iloc[:10]
     df_validated = validate_dataframe_with_llm(df, batch_size=16)
     df_validated.to_csv(
         "output/aggregated/df_annotations_validated.csv",
