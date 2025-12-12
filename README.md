@@ -1,6 +1,6 @@
 
 # 🧠 Mistral OCR Annotation Pipeline
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/) 
+[![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/) 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#-license) 
 [![Build](https://img.shields.io/badge/status-async%20pipeline-success)](#-quickstart)
 
@@ -10,28 +10,38 @@ Outputs include **annotated Markdown** files and an **aggregated CSV/Parquet** o
 ---
 
 ## ✨ Highlights
-- ⚡ **Asynchronous batching** of PDFs with configurable concurrency
-- 🧩 **Schema-driven extraction** via `ExtractionPayload` (Pydantic)
+- ⚡ **Asynchronous batching** of PDFs with configurable concurrency and rate limiting
+- 🧩 **Schema-driven extraction** via `ExtractionPayload` (Pydantic) with multiple extraction classes
 - 📝 **Markdown reports** with optional image annotations (base64 inlined)
 - 📊 **Aggregated outputs** in CSV and Parquet for downstream analysis
-- 🛡️ **Graceful error handling** with per-chunk resilience
-- 📝 **Logging** to `logs/pipeline.log` with `loguru`
+- 🛡️ **Graceful error handling** with per-chunk resilience and retry logic
+- 🔍 **Post-processing validation** with LLM-based field verification
+- 📝 **Logging** to `logs/pipeline.log` with `loguru` and rich console output
+- 🔄 **Resume capability** to skip already-processed PDFs
 
 ---
 
 ## 🗂️ Project Structure
-> The repository ships with a minimal, code-first layout. At runtime the pipeline creates output folders.
+> The repository ships with a modular, package-based layout. At runtime the pipeline creates output folders.
 
 ```
 .
-├─ extraction_payload.py        # Pydantic schema capturing all target fields
-├─ get_annotations.py           # Mistral OCR client + async wrapper
+├─ info_extraction/             # Core extraction package
+│  ├─ __init__.py
+│  ├─ extraction_payload.py    # Pydantic schema capturing all target fields
+│  ├─ get_annotations.py        # Mistral OCR client + async wrapper with rate limiting
+│  └─ to_markdown.py            # Transforms OCR response to Markdown with image annotations
+├─ utils/                       # Utility functions package
+│  ├─ __init__.py
+│  ├─ utils.py                  # Async I/O utilities: base64 encode, page count, dict merging
+│  └─ diagram.py                # Flow diagram generation for pipeline visualization
+├─ post_processing/             # Post-processing and validation package
+│  ├─ __init__.py
+│  ├─ post_processing.py        # LLM-based field validation and quality checks
+│  └─ unstack_payloads.py       # Field configuration and payload unstacking utilities
 ├─ main.py                      # Orchestrates concurrency, aggregation, and persistence
-├─ to_markdown.py               # Transforms OCR response to Markdown with image annotations
-├─ utils.py                     # Async I/O utilities: base64 encode, page count, dict merging
-├─ uv.lock                      # (uv) resolved dependency lock
 ├─ pyproject.toml               # Project metadata / dependencies (for uv/pip)
-├─ .python-version               # python version pin (e.g., 3.10.x / 3.11.x)
+├─ uv.lock                      # (uv) resolved dependency lock
 ├─ .env.example                 # Example environment variables (copy to .env)
 ├─ papers/                      # (create) input PDFs to process
 │  └─ your_paper_1.pdf
@@ -42,8 +52,9 @@ Outputs include **annotated Markdown** files and an **aggregated CSV/Parquet** o
 │  └─ aggregated/               # (auto-created) final tabular outputs
 │     ├─ df_annotations.csv
 │     └─ df_annotations.parquet
-logs/                           # (auto-created) logs
-│     └─ pipeline.log 
+├─ logs/                        # (auto-created) logs
+│  └─ pipeline.log
+├─ data/                        # (optional) Additional data files for analysis
 └─ README.md
 ```
 
@@ -66,15 +77,28 @@ cd mistral-ocr-pipeline
 ```
 
 ### 2) Python & Dependencies
+**Requires Python 3.13+**
+
+Using `uv` (recommended):
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+uv sync
 ```
 
-**Minimal requirements (if you’re installing manually):**
+Or using `pip`:
 ```bash
-pip install mistralai pydantic aiofiles pypdf python-dotenv pandas tqdm pyarrow
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e .
 ```
+
+**Key dependencies:**
+- `mistralai` - Mistral OCR API client
+- `pydantic` - Schema validation
+- `aiofiles` - Async file I/O
+- `pypdf` - PDF metadata extraction
+- `pandas` / `pyarrow` - Data aggregation
+- `langchain` / `langchain-openai` - Post-processing validation
+- `loguru` - Structured logging
+- `winloop` / `uvloop` - High-performance async event loop
 
 ### 3) Environment
 Create a `.env` from the example and add your key:
@@ -83,6 +107,9 @@ cp .env.example .env
 # then edit .env
 MISTRAL_API_KEY=your_api_key_here
 MAX_CONCURRENCY=3
+IMAGE_ANNOTATION=False
+OVERWRITE_MD=True
+MODEL_JUDGE=gpt-5-mini  # For post-processing validation (optional)
 ```
 
 ### 4) Input PDFs
@@ -103,15 +130,18 @@ python main.py
 ---
 
 ## 🧠 How It Works
-1. **Load & Encode** — `utils.encode_pdf` base64-encodes PDFs asynchronously.  
-2. **OCR + Annotation** — `get_annotations.py` calls Mistral OCR with a **document annotation format** mapped to `ExtractionPayload`.  
-3. **Chunking** — Large PDFs are processed in **MAX_PAGES_PER_REQ** chunks with **async concurrency**.  
-4. **Markdown** — `to_markdown.py` builds consolidated Markdown with (optional) image annotations.  
-5. **Aggregation** — Partial rows from chunks are **deduped/merged** and written to CSV/Parquet.
+1. **Load & Encode** — `utils.utils.encode_pdf` base64-encodes PDFs asynchronously.  
+2. **OCR + Annotation** — `info_extraction.get_annotations` calls Mistral OCR with rate limiting and retry logic, using **document annotation format** mapped to `ExtractionPayload` classes.  
+3. **Chunking** — Large PDFs are processed in **MAX_PAGES_PER_REQ** chunks with **async concurrency** and semaphore-based rate limiting.  
+4. **Markdown** — `info_extraction.to_markdown` builds consolidated Markdown with (optional) image annotations.  
+5. **Aggregation** — Partial rows from chunks are **deduped/merged** using `merge_multiple_dicts_async` and written to CSV/Parquet.  
+6. **Post-processing** (optional) — `post_processing.post_processing` provides LLM-based validation of extracted fields.
 
 **Ascii flow:**  
 ```
-PDFs -> base64 -> Mistral OCR -> JSON (ExtractionPayload) -> Markdown + Tabular -> CSV/Parquet
+PDFs -> base64 -> Mistral OCR (rate-limited) -> JSON (ExtractionPayload) -> Markdown + Tabular -> CSV/Parquet
+                                                                                ↓
+                                                                      Post-processing (validation)
 ```
 
 ---
@@ -121,18 +151,26 @@ Tune behavior via `.env`:
 ```ini
 MISTRAL_API_KEY=...     # required
 MAX_CONCURRENCY=3       # concurrent OCR calls
+IMAGE_ANNOTATION=False  # enable base64 image inlining in markdown
+OVERWRITE_MD=True       # overwrite existing markdown files
+MODEL_JUDGE=gpt-5-mini  # LLM model for post-processing validation
 ```
+
 Edit constants in `main.py` for chunk sizing:
 ```python
-MAX_PAGES_PER_REQ = 8
+MAX_PAGES_PER_REQ = 8  # pages per OCR request
 ```
+
+The pipeline uses `winloop` (Windows) or `uvloop` (Unix) for high-performance async I/O.
 
 ---
 
 ## 📘 Usage Notes
-- For **very long PDFs**, results are merged across chunks (`merge_multiple_dicts_async`).  
-- To **enable image annotations**, switch `image_annotation=True` in `get_annotation_async` call inside `process_one_pdf_chunk`.  
-- Parquet output requires `pyarrow` (or `fastparquet`).
+- For **very long PDFs**, results are merged across chunks using `merge_multiple_dicts_async`.  
+- To **enable image annotations**, set `IMAGE_ANNOTATION=True` in `.env` or pass `image_annotation=True` to the processing function.  
+- Parquet output requires `pyarrow` (included in dependencies).  
+- The pipeline supports **resume mode**: if `OVERWRITE_MD=False`, already-processed PDFs (tracked by SHA1 hash) are skipped.  
+- Rate limiting is built into the OCR client to respect API limits (configurable via `OCR_RPS`).
 
 ---
 
@@ -154,10 +192,20 @@ python main.py
 ---
 
 ## 🗺️ Roadmap
-- [ ] CLI flags (input dir, output dir, page range)  
-- [ ] Optional **image annotation** mode in CLI  
-- [ ] Retry & backoff on transient OCR errors  
-- [ ] Rich HTML report export with assets
+
+We’re continuously evolving to make your experience better! Here are some highlights:
+
+- ✅ Reliable: Automatic retry & backoff for transient OCR errors using `tenacity`
+- ✅ Smooth operation: Built-in rate limiting for safe and efficient OCR API usage
+- ✅ Robust: Effortless resume for already-processed PDFs—no lost progress
+- ✅ Quality assurance: Integrated LLM-powered post-processing validation
+
+**Coming soon to make your workflow even more seamless:**
+- 🚀 Flexible CLI flags (customize input/output directories, select page ranges)
+- 🌈 Beautiful rich HTML reports with embedded assets
+- 📊 Enhanced batch processing with intuitive progress bars
+
+Have feedback or ideas? We’d love to hear from you as we continue to build!
 
 ---
 
@@ -166,7 +214,10 @@ python main.py
 - **Pydantic** — robust schema modeling  
 - **pandas / pyarrow** — analytics-ready outputs  
 - **pypdf** — fast PDF metadata access
-- **loguru** — logging
+- **loguru** — structured logging
+- **langchain** — LLM integration for post-processing
+- **winloop / uvloop** — high-performance async event loops
+- **tenacity** — retry logic with exponential backoff
 
 ---
 
