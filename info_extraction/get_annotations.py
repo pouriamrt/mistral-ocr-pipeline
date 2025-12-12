@@ -10,7 +10,7 @@ from mistralai.extra import response_format_from_pydantic_model
 from mistralai.models import OCRResponse
 from loguru import logger
 
-from extraction_payload import (
+from info_extraction.extraction_payload import (
     Image,
     ExtractionMetaDesign,  # class 1
     ExtractionPopulationIndications,  # class 2
@@ -19,7 +19,7 @@ from extraction_payload import (
     ExtractionDiagnosticPerformance,  # class 5
 )
 
-from utils import merge_multiple_dicts_async
+from utils.utils import merge_multiple_dicts_async
 from time import monotonic
 
 # tokens per second; tune in .env (e.g., OCR_RPS=4 → max 4 requests/sec)

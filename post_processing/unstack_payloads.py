@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Type, Dict, Any, get_origin, get_args
 from pydantic import BaseModel
 
-from extraction_payload import (
+from info_extraction.extraction_payload import (
     ExtractionMetaDesign,
     ExtractionPopulationIndications,
     ExtractionMethods,

@@ -10,10 +10,10 @@ from tqdm import tqdm
 from mistralai import Mistral
 from rich.traceback import install
 
-from to_markdown import convert_to_markdown
-from get_annotations import run_all_payloads
-from extraction_payload import df_cols_from_models
-from utils import (
+from info_extraction.to_markdown import convert_to_markdown
+from info_extraction.get_annotations import run_all_payloads
+from info_extraction.extraction_payload import df_cols_from_models
+from utils.utils import (
     encode_pdf,
     get_pdf_page_count,
     merge_multiple_dicts_async,
