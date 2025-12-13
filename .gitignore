@@ -7,7 +7,7 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
 
 .env
 data/
@@ -16,3 +16,6 @@ papers/
 test.ipynb
 logs/
 .ruff_cache/
+.mypy_cache/
+.DS_Store
+.cursor/

@@ -175,9 +175,10 @@ async def amain():
         columns = [*df_cols_from_models(), "__source_file__"]
 
         async with Mistral(api_key=api_key) as client:
-            list_of_pdfs = list(Path("papers").glob("*.pdf"))
+            path_to_pdfs = "papers/todo"
+            list_of_pdfs = list(Path(path_to_pdfs).glob("*.pdf"))
             if not list_of_pdfs:
-                logger.error("No PDFs found in ./papers")
+                logger.error(f"No PDFs found in {path_to_pdfs}")
                 return
 
             todo = [

@@ -1,6 +1,7 @@
 import asyncio
 from typing import List, Type, Dict, Any, Tuple
 import json
+import uuid
 
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
@@ -70,6 +71,7 @@ def _get_annotation_sync(
         return None
 
     kwargs = {
+        "id": str(uuid.uuid4()),
         "model": model_name,
         "pages": pages,
         "document": {

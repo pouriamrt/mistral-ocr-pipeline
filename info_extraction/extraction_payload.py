@@ -55,8 +55,9 @@ class ExtractionMetaDesign(BaseModel):
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) Do not use external knowledge.
+    7) IGNORE external knowledge.
     8) Ignore Introduction/Background, References and Acknowledgments content.
+    9) Focus on Methods and Results and Abstract sections.
     """
 
     # Journal & author info
@@ -176,8 +177,9 @@ class ExtractionPopulationIndications(BaseModel):
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) Do not use external knowledge.
+    7) IGNORE external knowledge.
     8) Ignore Introduction/Background, References and Acknowledgments content.
+    9) Focus on Methods and Results and Abstract sections.
     """
 
     # Patient population
@@ -200,7 +202,7 @@ class ExtractionPopulationIndications(BaseModel):
         alias="Patient population 1",
         description=(
             "Include a DOAC ONLY if its level was actually measured in this study. "
-            "Do not include DOACs only mentioned in Intro/Discussion/external citations."
+            "IGNORE DOACs only mentioned in Intro/Discussion/external citations."
         ),
     )
     doacs_included_sentence_from_text: Optional[List[str]] = Field(
@@ -250,7 +252,7 @@ class ExtractionPopulationIndications(BaseModel):
             "1) The inclusion criteria explicitly restrict to that subgroup (e.g., 'patients with CKD stage 3–5').\n"
             "2) The study defines a pre-specified subgroup analysis (e.g., 'we analyzed outcomes separately in patients with body weight ≥120 kg').\n"
             "3) The title or objectives clearly state that subgroup (e.g., '...in patients with short bowel syndrome').\n\n"
-            "EXPLICIT NEGATIVE RULE: Do NOT label a subgroup solely because:\n"
+            "EXPLICIT NEGATIVE RULE: IGNORE labeling a subgroup solely because:\n"
             "• The characteristic is reported in baseline tables or baseline characteristics.\n"
             "• The characteristic is mentioned in the Introduction or Background.\n"
             "• A single keyword appears without explicit subgroup analysis or restriction.\n"
@@ -281,7 +283,7 @@ class ExtractionPopulationIndications(BaseModel):
             "   Exclusions: bleeding described without measured levels; generic reversal discussion.\n\n"
             "11) Genetic polymorphism — Requires: inclusion criteria restricting to specific genotypes, OR explicit analysis of levels by genotype.\n"
             "   Exclusions: genotyping performed without level stratification; generic pharmacogenetics discussion.\n\n"
-            "If ambiguous or no explicit restriction/analysis exists, leave null. Do NOT guess based on keywords alone."
+            "If ambiguous or no explicit restriction/analysis exists, leave null. IGNORE guessing based on keywords alone."
         ),
     )
     relevant_subgroups_sentence_from_text: Optional[List[str]] = Field(
@@ -377,8 +379,9 @@ class ExtractionMethods(BaseModel):
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) Do not use external knowledge.
+    7) IGNORE external knowledge.
     8) Ignore Introduction/Background, References and Acknowledgments content.
+    9) Focus on Methods and Results and Abstract sections.
     """
 
     doac_level_measurement: Optional[
@@ -422,13 +425,13 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="DOAC Level Measurement",
         description=(
-            "CRITICAL: Scan the ENTIRE Methods section for assay methodology terms. Return ALL methods that were actually used "
-            "in THIS study to quantify DOAC levels (patient sample measurements only). Do NOT infer from Background/Discussion.\n\n"
+            "CRITICAL: Scan the ENTIRE Methods and Results sections for assay methodology terms. Return ALL methods that were actually used "
+            "in THIS study to quantify DOAC levels (patient sample measurements only). IGNORE Background/Discussion.\n\n"
             "Two-step process:\n"
-            "Step 1 (Evidence): Quote exact sentences from Methods that describe the assay methods used. "
+            "Step 1 (Evidence): Quote exact sentences from Methods and Results that describe the assay methods used. "
             "Scan for ALL synonyms and variants (see synonym map below).\n"
             "Step 2 (Decision): Based ONLY on those quoted sentences, classify ALL applicable methods.\n\n"
-            "SYNONYM MAP FOR HPLC-MS (CRITICAL - scan for ALL variations):\n"
+            "SYNONYM MAP FOR HPLC-MS/LC-MS (CRITICAL - scan for ALL variations):\n"
             "• HPLC-MS / HPLC-MS/MS / HPLC/MS / HPLC/MS/MS (with hyphens OR forward slashes)\n"
             "• LC-MS/MS / LC-MS / LC/MS / LC/MS/MS\n"
             "• UPLC-MS / UPLC-MS/MS / UPLC/MS / UPLC/MS/MS\n"
@@ -436,7 +439,7 @@ class ExtractionMethods(BaseModel):
             "• Liquid chromatography-mass spectrometry / liquid chromatography mass spectrometry\n"
             "• Mass spectrometry / MS / tandem mass spectrometry / MS/MS\n"
             '• Any combination of "HPLC" or "LC" or "UPLC" with "MS" or "mass spectrometry"\n'
-            "  → ALL map to 'HPLC-MS (ng/mL)'\n\n"
+            "  → ALL map to 'HPLC-MS/LC-MS (ng/mL)'\n\n"
             "SYNONYM MAP FOR OTHER METHODS:\n"
             "• Calibrated anti-Xa / drug-specific anti-Xa / DOAC-specific anti-Xa / DiXaI / Biophen / "
             "STA-Liquid Anti-Xa + drug calibrator / TECHNOVIEW / HemosIL Liquid Anti-Xa + drug calibrators / "
@@ -507,7 +510,7 @@ class ExtractionMethods(BaseModel):
         alias="DOAC Level Measurement Descriptors",
         description=(
             "CRITICAL: Scan the ENTIRE Methods section for assay terms. Return ALL assay descriptors that were actually used "
-            "in THIS study to quantify DOAC levels (patient sample measurements only). Do NOT infer from Background/Discussion.\n\n"
+            "in THIS study to quantify DOAC levels (patient sample measurements only). IGNORE Background/Discussion.\n\n"
             "Two-step process:\n"
             "Step 1 (Evidence): Quote exact sentences from Methods that describe the assay methods used. "
             "Scan for ALL synonyms and variants (see synonym map below).\n"
@@ -575,58 +578,84 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="Pre-Analytical Variables",
         description=(
-            "CRITICAL: Scan the ENTIRE Methods section for pre-analytical variable descriptions. "
-            "Include ONLY if explicitly described as applied to DOAC level measurement specimens in THIS study.\n\n"
-            "Two-step process:\n"
-            "Step 1 (Evidence): Quote exact sentences from Methods that describe pre-analytical procedures "
-            "(collection, tube type, centrifugation, storage).\n"
-            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the variables.\n\n"
-            "Include a variable ONLY if:\n"
-            "1) It is explicitly described in Methods (not just mentioned in Discussion/Background).\n"
-            "2) It was applied to the specimens measured in THIS study (not background examples).\n\n"
-            "KEYWORD SUGGESTIONS FOR IDENTIFICATION:\n\n"
-            "1) Blood collection procedures:\n"
-            "Core indicator terms: venipuncture, phlebotomy, blood draw / blood sampling / blood collection, "
-            "venous blood / peripheral venous blood, antecubital vein / antecubital fossa, butterfly needle, "
-            "needle gauge / 21‑gauge / 22‑gauge / 21G / 22G, tourniquet / tourniquet application, "
-            "vacutainer / vacuum collection system\n"
-            'Procedure/context phrases: "blood was collected from", "venous blood was drawn using", '
-            '"single venipuncture" / "single blood draw", "non‑traumatic venipuncture", '
-            '"without stasis" / "minimal stasis", "fasting state" / "after an overnight fast", '
-            '"subject seated / supine for X minutes before sampling", "time of day of blood collection" '
-            '("morning sample", "pre‑dose", "trough sample")\n\n'
-            "2) Collection tube type:\n"
-            "Core tube descriptors: collection tube / blood collection tube, coagulation tube / citrate tube / "
-            '"blue‑top tube", plasma tube / serum tube / plain tube, Vacutainer / BD Vacutainer, '
-            "Sarstedt / Greiner / Monovette (manufacturer names)\n"
-            "Anticoagulant / additive keywords: sodium citrate / Na‑citrate / citrated tube, "
-            "3.2% citrate / 3.8% citrate / 0.109 mol/L citrate, EDTA / K2EDTA / K3EDTA, "
-            'heparin / lithium heparin / Na‑heparin, "no additive" / "additive‑free" / "clot activator", '
-            '"gel separator" / serum separator tube (SST)\n'
-            'Typical phrases: "blood was collected into [X] tubes", '
-            '"blood was drawn into 2.7 mL 3.2% sodium citrate tubes (Becton Dickinson)", '
-            '"citrated plasma obtained from 3.2% sodium citrate Vacutainer tubes"\n\n'
-            "3) Centrifugation speed:\n"
-            "Core process terms: centrifuge / centrifugation, spun / spin / spun down, "
-            "relative centrifugal force / RCF, g‑force / ×g / x g, rpm / revolutions per minute\n"
-            'Typical formats: "centrifuged at 1,500 × g for 10 min", "centrifuged at 2,500g for 15 minutes", '
-            '"spun at 3,000 rpm for 10 min", "double centrifugation" / "two‑step centrifugation", '
-            '"to obtain platelet‑poor plasma (PPP)", "centrifuged at room temperature" / "centrifuged at 4°C"\n\n'
-            "4) Storage temperature:\n"
-            "Core temperature + storage terms: stored at / kept at / maintained at, "
-            "frozen at / immediately frozen / snap frozen, refrigerated / kept at 4°C, "
-            "room temperature / ambient temperature / RT, long‑term storage / short‑term storage, "
-            "aliquots / aliquoted and stored\n"
-            "Temperature formats: −80°C / -80°C, −70°C / -70°C, −20°C / -18°C, 4°C / 2–8°C, "
-            '20–25°C / "room temperature" / "ambient"\n'
-            'Typical phrases: "plasma samples were aliquoted and stored at −80°C until analysis", '
-            '"samples were kept at 4°C and analyzed within 4 hours", '
-            '"serum was stored at −20°C before batch analysis", "samples were kept at room temperature"\n\n'
+            "CRITICAL: Review the entire Methods section for explicit descriptions of pre-analytical variables relating to DOAC level measurement specimens. "
+            "Include only when the procedures were specifically applied to specimens analyzed in THIS study (not background, review, or capability statements).\n\n"
+            "Pre-analytical variables to flag (include only if used in THIS study):\n"
+            "• Blood collection procedures (e.g., needle gauge, tourniquet technique)\n"
+            "• Collection tube type (e.g., 2.7% citrate Becton Dickinson)\n"
+            "• Centrifugation speed\n"
+            "• Storage temperature (e.g., -80°C)\n\n"
+            "Follow a strict two-step process:\n"
+            "Step 1 – Evidence:\n"
+            "  Quote the precise sentences from the Methods section describing collection, tube, centrifugation, or storage procedures for DOAC level specimens.\n"
+            "Step 2 – Decision:\n"
+            "  Flag a variable as present ONLY if there is explicit reporting for samples measured in THIS study.\n\n"
+            "Detailed keyword guidance for identification (flag only if present in the Methods):\n\n"
+            "1. Blood collection procedures:\n"
+            "   Core indicator terms:\n"
+            "     - venipuncture, phlebotomy\n"
+            "     - blood draw, blood sampling, blood collection\n"
+            "     - venous blood, peripheral venous blood\n"
+            "     - antecubital vein, antecubital fossa\n"
+            "     - butterfly needle\n"
+            "     - needle gauge (e.g., 21-gauge, 22-gauge, 21G, 22G)\n"
+            "     - tourniquet, tourniquet application\n"
+            "     - vacutainer, vacuum collection system\n"
+            "   Procedure/context phrases:\n"
+            '     - "blood was collected from", "venous blood was drawn using"\n'
+            '     - "single venipuncture", "single blood draw"\n'
+            '     - "non-traumatic venipuncture"\n'
+            '     - "without stasis", "minimal stasis"\n'
+            '     - "fasting state", "after an overnight fast"\n'
+            '     - "subject seated for X minutes before sampling", "supine for X minutes before sampling"\n'
+            '     - time of day descriptors: "morning sample", "pre-dose", "trough sample"\n\n'
+            "2. Collection tube type:\n"
+            "   Core tube descriptors:\n"
+            "     - collection tube, blood collection tube\n"
+            "     - coagulation tube, citrate tube, blue-top tube\n"
+            "     - plasma tube, serum tube, plain tube\n"
+            "     - Vacutainer, BD Vacutainer, Sarstedt, Greiner, Monovette\n"
+            "   Anticoagulant/additive keywords:\n"
+            "     - sodium citrate, Na-citrate, citrated tube\n"
+            "     - 3.2% citrate, 3.8% citrate, 0.109 mol/L citrate\n"
+            "     - EDTA, K2EDTA, K3EDTA\n"
+            "     - heparin, lithium heparin, Na-heparin\n"
+            "     - no additive, additive-free, clot activator\n"
+            "     - gel separator, serum separator tube (SST)\n"
+            "   Typical phrases:\n"
+            '     - "blood was collected into [X] tubes"\n'
+            '     - "blood was drawn into 2.7 mL 3.2% sodium citrate tubes (Becton Dickinson)"\n'
+            '     - "citrated plasma obtained from 3.2% sodium citrate Vacutainer tubes"\n\n'
+            "3. Centrifugation speed:\n"
+            "   Core process terms:\n"
+            "     - centrifuge, centrifugation, spun, spin, spun down\n"
+            "     - relative centrifugal force (RCF), g-force, ×g, x g\n"
+            "     - rpm, revolutions per minute\n"
+            "   Typical formats:\n"
+            '     - "centrifuged at 1,500 × g for 10 min"\n'
+            '     - "centrifuged at 2,500g for 15 minutes"\n'
+            '     - "spun at 3,000 rpm for 10 min"\n'
+            '     - "double centrifugation", "two-step centrifugation"\n'
+            '     - "to obtain platelet-poor plasma (PPP)"\n'
+            '     - "centrifuged at room temperature", "centrifuged at 4°C"\n\n'
+            "4. Storage temperature:\n"
+            "   Core temperature & storage terms:\n"
+            "     - stored at, kept at, maintained at\n"
+            "     - frozen at, immediately frozen, snap frozen\n"
+            "     - refrigerated, kept at 4°C\n"
+            "     - room temperature, ambient temperature, RT\n"
+            "     - long-term storage, short-term storage\n"
+            "     - aliquots, aliquoted and stored\n"
+            "   Temperature formats:\n"
+            '     - −80°C, -80°C, −70°C, -70°C, −20°C, -18°C, 4°C, 2–8°C, 20–25°C, "room temperature", "ambient"\n'
+            "   Typical phrases:\n"
+            '     - "plasma samples were aliquoted and stored at −80°C until analysis"\n'
+            '     - "samples were kept at 4°C and analyzed within 4 hours"\n'
+            '     - "serum was stored at −20°C before batch analysis"\n'
+            '     - "samples were kept at room temperature"\n\n'
             "Common errors to avoid:\n"
-            "• False negatives: Leaving this blank even when centrifugation speed, temperature, storage are clearly described in Methods.\n"
-            "• Including variables mentioned only in Discussion/Background without Methods description.\n"
-            "• Missing variables when keywords/phrases are present but not recognized.\n\n"
-            "If the article does not clearly report pre-analytical variables, leave null. Do NOT guess."
+            "• Overcounting: Do NOT flag if only mentioned in Background, Introduction, or as general lab capabilities rather than specimen-specific protocol.\n"
+            "• Do NOT guess based on context or intuition if explicit Methods evidence is lacking; leave null if not reported."
         ),
     )
     pre_analytical_variables_sentence_from_text: Optional[List[str]] = Field(
@@ -646,112 +675,60 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="Conventional Coagulation Tests Concurrently Reported",
         description=(
-            "CRITICAL: Scan the ENTIRE Methods and Results sections for conventional coagulation test terms. "
-            "Include ONLY if explicitly described as performed on the same specimens as DOAC level measurement.\n\n"
-            "FIRST FILTER: Only count tests actually measured in the study\n"
-            "Apply these constraints strictly:\n\n"
-            "1) Restrict to Methods / Results sections:\n"
-            '   • Only count mentions that appear under headings such as "Methods", "Materials and Methods", '
-            '"Laboratory methods", "Study procedures", "Results", "Outcomes", "Baseline characteristics", '
-            '"Laboratory results", etc.\n'
-            "   • Or in text that clearly describes what was done to study participants or what was measured at baseline/follow-up.\n\n"
-            '2) Require a "measurement context" near the test name:\n'
-            "   Only count PT/aPTT as measured if the sentence (or the one immediately before/after) contains at least one of:\n"
-            '   • "measured", "was measured", "were measured"\n'
-            '   • "determined", "assessed", "tested", "performed"\n'
-            '   • "recorded", "collected", "obtained"\n'
-            '   • "available", "included", "reported" (when referring to baseline or follow-up lab values)\n'
-            '   • Or appears in a description of a table of baseline labs (e.g., "Table 1. Baseline laboratory parameters including PT, aPTT …").\n\n'
-            "3) Explicitly ignore Introduction/Background-only mentions:\n"
-            "   If PT or aPTT is mentioned only in:\n"
-            '   • General background (e.g., "PT and aPTT are widely used to assess coagulation")\n'
-            "   • Description of standard practice, guidelines, or prior literature\n"
-            "   and there is no measurement context as above, then do NOT flag the study as having measured PT or aPTT.\n\n"
-            "Two-step process:\n"
-            "Step 1 (Evidence): Quote exact sentences from Methods/Results that describe which conventional coagulation tests were performed. "
-            "Look for explicit listings like 'PT, aPTT, and TT were measured' or 'coagulation tests included PT and aPTT'.\n"
-            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the tests.\n\n"
-            "PT (PROTHROMBIN TIME) – KEYWORDS AND RULES:\n\n"
-            "1) Strong PT keywords (test names):\n"
-            "   Flag PT as measured if any of the following appear in Methods/Results with a measurement context:\n"
-            '   • Full names: "prothrombin time", "Quick prothrombin time", "Quick test", "Quick\'s test"\n'
-            '   • Combined terms: "PT/INR", "PT‑INR", "prothrombin time/INR", "prothrombin time (PT)/international normalized ratio (INR)"\n'
-            '   • Abbreviations: "prothrombin time (PT)" → subsequent "PT", "PT (prothrombin time)"\n'
-            '   • Additional indicators: "prothrombin ratio", "prothrombin activity" (esp. if combined with "Quick" or PT reagents)\n\n'
-            "2) INR as a PT proxy:\n"
-            "   INR is essentially specific to PT. If an article says in Methods/Results:\n"
-            '   • "INR was measured", "we determined INR", "baseline INR", "we recorded INR", and\n'
-            '   • there is no contrary indication that "INR" is being used in some nonstandard way,\n'
-            "   you can safely treat that as PT measured, since INR is defined as a standardized transformation of the PT.\n"
-            '   Rule: If "INR" appears with measurement verbs in Methods/Results, flag PT = yes (even if "PT" is not explicitly written).\n\n'
-            "3) PT-specific reagents (positive list):\n"
-            "   Many papers only name the reagent. The following are PT reagents (thromboplastin-based) and should count as PT, not aPTT, "
-            "when in measurement context:\n"
-            "   • Thromborel S (Dade/Siemens) – PT reagent\n"
-            "   • Dade Innovin (Innovin) – recombinant thromboplastin PT reagent\n"
-            "   • Neoplastin / Néoplastine / Neoplastine CI Plus / STA‑Neoplastine – PT reagents\n"
-            "   • STA‑NeoPTimal – PT/INR reagent\n"
-            "   • Thrombotest – PT (Quick/Owren type)\n"
-            "   • Normotest / Normotest Automated / Normotest® – PT (combined thromboplastin)\n"
-            "   • RecombiPlasTin / RecombiPlasTin 2G – PT reagent\n"
-            "   • Spinreact Prothrombin time reagent\n"
-            "   • Technoclot PT Owren – PT reagent replacing Thrombotest/Normotest\n"
-            '   • Generic phrases like "prothrombin time reagent containing thromboplastin and calcium chloride"\n'
-            "   Rule: If any of these reagent names occur in Methods/Results with measurement verbs or explicit mention of clotting time, "
-            'classify PT measured, even if the text doesn\'t restate "PT" in that sentence.\n\n'
-            "4) Thromboplastin and PT (critical distinction):\n"
-            "   Key biochemical point: Thromboplastin reagents are standard for PT, NOT for aPTT. PT testing requires a thromboplastin reagent "
-            "(tissue factor + phospholipid + Ca²⁺).\n"
-            "   Therefore:\n"
-            '   • "thromboplastin" by itself does NOT imply aPTT.\n'
-            '   • If "thromboplastin" appears in the context of Thromborel S, Innovin, Neoplastin, Thrombotest, Normotest, Technoclot PT, etc., '
-            'or "prothrombin time reagent", treat this as PT, not aPTT.\n'
-            '   • Only count aPTT if the text includes "partial thromboplastin", "aPTT", "APTT", "PTT" (clearly defined as partial '
-            'thromboplastin time), or an explicit aPTT reagent name. The word "thromboplastin" alone is NEVER sufficient for aPTT.\n\n'
-            "aPTT (ACTIVATED PARTIAL THROMBOPLASTIN TIME) – KEYWORDS AND RULES:\n\n"
-            "1) Strong aPTT keywords (test names):\n"
-            "   Flag aPTT as measured if any of these appear in Methods/Results with measurement context:\n"
-            '   • Full names: "activated partial thromboplastin time", "partial thromboplastin time"\n'
-            '   • Abbreviations: "aPTT", "APTT", "A‑PTT"\n'
-            '   • "PTT" or "partial thromboplastin time (PTT)" when clearly defined as such\n'
-            '   • Historical synonyms: "kaolin‑cephalin clotting time", "kaolin cephalin clotting time", "KCCT"\n\n'
-            "2) aPTT-specific reagents (positive list):\n"
-            "   These reagents are aPTT reagents and should be treated as aPTT, not PT, if used to measure a clotting time:\n"
-            '   • Dade Actin® reagents (all "Actin" APTT formulations): Dade Actin® Activated Cephaloplastin, Dade Actin FS Activated PTT, '
-            "Dade Actin FSL Activated PTT\n"
-            "   • Pathromtin® SL – APTT reagent\n"
-            "   • STA‑PTT Automate – APTT reagent\n"
-            "   • STA Cephascreen – APTT reagent\n"
-            '   • Phrases like "APTT reagent", "activated PTT reagent"\n'
-            '   Rule: If any of these aPTT reagents are mentioned in Methods/Results with measurement verbs (e.g., "aPTT was measured using '
-            'Pathromtin SL"), classify aPTT measured.\n\n'
-            '3) Handling "PTT" alone:\n'
-            '   "PTT" alone is ambiguous in pure text, but in clinical/lab contexts it almost always means partial thromboplastin time.\n'
-            "   Practical rules:\n"
-            '   • If the article at any point defines the abbreviation: "partial thromboplastin time (PTT)" or "activated partial '
-            'thromboplastin time (aPTT)", then any subsequent "PTT"/"aPTT" in Methods/Results with measurement context → aPTT measured.\n'
-            '   • If the only occurrence is something like "PT/INR and PTT were measured", and earlier they defined "PTT" as partial '
-            "thromboplastin time, treat as PT = yes, aPTT = yes.\n"
-            '   • If "PTT" is never defined and occurs in a single generic list without context, interpret it as partial thromboplastin time '
-            "if there is measurement context.\n\n"
-            "4) Negative/ambiguous cases for aPTT:\n"
-            "   Do NOT classify as aPTT if:\n"
-            '   • Only "thromboplastin" is mentioned without "partial".\n'
-            "   • Only PT reagents (Thromborel S, Innovin, Neoplastin, Thrombotest, Normotest, etc.) are named.\n"
-            '   • aPTT is mentioned only in a phrase like "Routine coagulation tests such as PT and aPTT are widely used…" in the Introduction, '
-            "with no measurement context in Methods/Results.\n\n"
-            "Include a test ONLY if:\n"
-            "1) It is explicitly listed in Methods/Results as performed (not just mentioned in Discussion/Background/Introduction).\n"
-            "2) It was performed on the same specimens as DOAC level measurement.\n"
-            '3) There is a measurement context (verbs like "measured", "determined", "assessed", "performed", "recorded", etc.).\n\n'
-            "Common errors to avoid:\n"
-            "• False negatives: Leaving this blank despite a clear Methods paragraph listing PT/aPTT with measurement context.\n"
-            '• False positives: Inferring aPTT from the word "thromboplastin" when only PT is actually measured (thromboplastin = PT reagent).\n'
-            "• Inferring aPTT when only PT is reported: Reporting PT alone does NOT imply aPTT was performed.\n"
-            "• Counting tests mentioned only in Introduction/Background without Methods/Results measurement context.\n"
-            "• Missing PT when only INR is mentioned (INR is a PT proxy).\n"
-            "• Missing PT when only PT reagent names are mentioned (e.g., Thromborel S, Innovin, Neoplastin).\n\n"
-            "If the article does not clearly report which conventional tests were performed with measurement context, leave null. Do NOT guess."
+            "CONVENTIONAL COAGULATION TESTING (PT and aPTT)\n"
+            "------------------------------------------------\n"
+            "This field captures whether conventional coagulation tests—specifically prothrombin time (PT) and/or activated partial thromboplastin time (aPTT)—"
+            "were actually performed and reported on the same specimens as DOAC (direct oral anticoagulant) measurements in the study.\n\n"
+            "GENERAL RULES:\n"
+            "• Only count a test if the article explicitly describes *measurement* (not merely mentioning the test in background, introduction, or theory).\n"
+            "• Ignore general mentions of 'PT' or 'aPTT' if there is no evidence that the test was performed on study samples.\n\n"
+            "STRICT FILTERING CRITERIA (APPLIES REGARDLESS OF TECHNIQUE):\n\n"
+            "1) SECTION RELEVANCE:\n"
+            "   • Only count tests mentioned in 'Methods', 'Materials and Methods', 'Laboratory Methods', 'Study Procedures', 'Results', 'Outcomes', "
+            "'Baseline characteristics', 'Laboratory results', or any text directly describing procedures/measurements for participants.\n"
+            "   • Ignore mentions limited to Introduction, Background, or descriptions of general practice/guidelines.\n\n"
+            "2) MEASUREMENT CONTEXT REQUIRED:\n"
+            "   Only flag PT or aPTT as measured if the sentence (or one immediately before/after) includes verbs/phrases like:\n"
+            "   • 'measured', 'was measured', 'were measured', 'determined', 'assessed', 'tested', 'performed',\n"
+            "   • 'recorded', 'collected', 'obtained',\n"
+            "   • 'available', 'included', 'reported' (when referring to baseline or follow-up laboratory values),\n"
+            "   • or the test appears clearly as part of a tabulated list of baseline laboratory findings (e.g. “Table 1. Baseline laboratory parameters including PT, aPTT …”).\n\n"
+            "3) IGNORE NON-MEASUREMENT MENTION:\n"
+            "   • Do NOT count PT or aPTT if only mentioned in background—e.g., 'PT and aPTT are widely used to assess coagulation.'\n"
+            "   • Do not infer measurement from listing as a general lab capability or guideline if not linked to study participants.\n"
+            "   • LLM and human: Only flag as measured if description of actual lab testing on specific study samples appears in Methods/Results.\n\n"
+            "PT (Prothrombin Time):\n"
+            "----------------------\n"
+            "Treat PT as measured if any of the following occurs in an appropriate section with measurement context:\n"
+            "  - Full test names: 'prothrombin time', 'Quick prothrombin time', 'Quick test', 'Quick’s test'.\n"
+            "  - Combined terms: 'PT/INR', 'PT‑INR', 'prothrombin time/INR', 'prothrombin time (PT)/international normalized ratio (INR)'.\n"
+            "  - Abbreviations: 'prothrombin time (PT)' (→ subsequent 'PT'), 'PT (prothrombin time)'.\n"
+            "  - Additional: 'prothrombin ratio', 'prothrombin activity' (especially if with 'Quick' or PT reagents).\n"
+            "  - INR as proxy: If 'INR' is measured (without evidence that INR means something non-standard), this counts as PT measured since INR is derived from PT.\n"
+            "  - PT-specific reagents: If a reagent below is named (+ appropriate verb), treat as PT measured, even if 'PT' not restated:\n"
+            "    • Thromborel S (Dade/Siemens), Dade Innovin (Innovin), Neoplastin/STA‑Neoplastine family, STA‑NeoPTimal, Thrombotest, Normotest, RecombiPlasTin, "
+            "Spinreact Prothrombin time reagent, Technoclot PT Owren, or any 'prothrombin time reagent containing thromboplastin.'\n"
+            "  - Biochemical note: 'Thromboplastin' is a PT reagent, not aPTT. Only count aPTT if there is explicit mention of 'partial thromboplastin', 'aPTT', 'APTT', 'PTT' (clearly defined), or a specific aPTT reagent (see below).\n\n"
+            "aPTT (Activated Partial Thromboplastin Time):\n"
+            "--------------------------------------------\n"
+            "Treat aPTT as measured ONLY IF any of these appear in a proper section with measurement context:\n"
+            "  - Full names: 'activated partial thromboplastin time', 'partial thromboplastin time'.\n"
+            "  - Abbreviations: 'aPTT', 'APTT', 'A‑PTT'.\n"
+            "  - 'PTT' or 'partial thromboplastin time (PTT)' when the abbreviation is defined as such earlier in the article.\n"
+            "  - Historical: 'kaolin‑cephalin clotting time', 'kaolin cephalin clotting time', 'KCCT'.\n"
+            "  - aPTT-specific reagents: Dade Actin® reagents (all Actin APTT types), Pathromtin SL, STA-PTT Automate, STA Cephascreen, phrases like 'APTT reagent', 'activated PTT reagent'.\n"
+            "    If any of these named plus measurement context → aPTT measured.\n"
+            "  - If 'PTT' is only used and clearly defined as 'partial thromboplastin time', later occurrences with appropriate verbs count as aPTT measured.\n"
+            "  - If 'PTT' is never defined, but found in a list with measurement verbs in Methods/Results, consider as aPTT measured if aLLM/human review finds context sufficient.\n"
+            "  - *Never* count aPTT if the only word is 'thromboplastin' (without 'partial'), or if only PT reagent names appear.\n"
+            "  - IGNORE background-only or generic mentions.\n\n"
+            "IGNORE:\n"
+            "  - Assume aPTT if only 'thromboplastin' or PT reagents are named.\n"
+            "  - Assume both PT and aPTT were measured merely because one was.\n"
+            "  - Guess: If there is no specific evidence in Methods/Results, leave null.\n\n"
+            "APPLIES FOR ALL DOACS (overall and per drug):\n"
+            "  - The rules above apply regardless of which DOACs (apixaban, rivaroxaban, edoxaban, betrixaban, dabigatran) are tested.\n"
+            "  - Only fill this field if at least one of the explicit criteria is satisfied for a particular study or DOAC regimen."
         ),
     )
     coagulation_tests_concurrent_sentence_from_text: Optional[List[str]] = Field(
@@ -817,8 +794,9 @@ class ExtractionOutcomes(BaseModel):
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) Do not use external knowledge.
+    7) IGNORE external knowledge.
     8) Ignore Introduction/Background, References and Acknowledgments content.
+    9) Focus on Methods and Results and Abstract sections.
     """
 
     # Timing of DOAC Level Measurement Relative to DOAC Intake
@@ -835,29 +813,28 @@ class ExtractionOutcomes(BaseModel):
         default=None,
         alias="Timing of DOAC level measurement relative to DOAC intake",
         description=(
-            "CRITICAL: Classify timing based on explicit interval from last dose, NOT clock times or background PK descriptions.\n\n"
-            "Two-step process:\n"
-            "Step 1 (Evidence): Quote exact sentences from Methods/Results (NOT Introduction/Background) "
-            "that describe when samples were collected relative to DOAC dosing.\n"
-            "Step 2 (Decision): Based ONLY on those quoted sentences, classify the timing.\n\n"
-            "Classification rules:\n"
-            "• 'Peak level (2–4 hours post-dose)' = Explicit interval from last dose is ~2–4 hours "
-            "(e.g., '2 hours after dose', '3 hours post-dose', 'samples collected 2–4 hours after administration').\n\n"
-            "• 'Trough level (just prior to next dose)' = Explicit interval from last dose corresponds to just before next scheduled dose "
-            "(e.g., '12 hours after last dose' for apixaban/dabigatran, '24 hours after last dose' for rivaroxaban/edoxaban, "
-            "'just prior to next dose', 'pre-dose', 'trough level').\n\n"
-            "• 'Random level' = Timing is described ONLY as a clock time (e.g., 'between 9 and 11 am', 'sample at 11:00') "
-            "WITHOUT linkage to last dose, OR timing is reported but unclear whether peak or trough.\n\n"
-            "• 'Timing not reported' = No timing information provided in Methods/Results.\n\n"
-            "Common errors to avoid:\n"
-            "• Treating a clock time ('sample at 11:00') as 'trough' rather than recognizing it's just a random level.\n"
-            "• Treating background statements about peak/trough kinetics (in Introduction/Background) as though they describe "
-            "the actual sampling in the current study.\n"
-            "• For systematic reviews: If included studies mix peak and trough and the review aggregates them, "
-            "you may label both Peak+Trough, but document in the sentence that this applies to different source studies.\n\n"
-            "Do NOT infer timing from pharmacokinetic descriptions in Background. "
-            "Only use explicit sampling schedule descriptions from Methods/Results.\n\n"
-            "Select ALL that apply if a study measured multiple timepoints."
+            "Extract ONLY explicit information regarding the timing of DOAC level measurement relative to drug intake, as clearly stated in the METHODS or RESULTS sections of the article. "
+            "Completely disregard information from Introduction, Background, or references, even if the timing is discussed there, unless it is also stated in Methods/Results.\n\n"
+            "Principles:\n"
+            "1) Extract stated timing ONLY if it is directly documented in the study's own Methods or Results section (not figures/legends from other papers, not inferred from literature, not in background/discussion).\n"
+            "2) Do NOT infer or assume timing from context, general pharmacokinetic knowledge, or patterns of DOAC use—RESTRICT to what is expressly described for sample collection in THIS study.\n"
+            "3) If timing information is available in both Methods and Results, always prioritize the Methods description. If both are present and equivalent, you may select based on either, but cite the Methods first if possible.\n"
+            "4) If a study involves subgroups or multiple sampling points (e.g., both peak and trough or different patient cohorts), capture ALL distinct timing categories that are clearly specified in the eligible sections.\n"
+            "5) For systematic reviews/meta-analyses, annotate timing only if the paper's Methods/Results explicitly describe the timing category as applied to the included studies (e.g., 'X studies used trough samples, 2 used peak samples').\n\n"
+            "Classification options and definitions:\n"
+            "• 'Peak level (2–4 hours post-dose)': Select if the paper EXPLICITLY reports blood samples were collected within the range of 2–4 hours after the last DOAC dose (e.g., 'samples were obtained 3 hours post-dose'). The description must reference both the interval AND its relation to most recent dose.\n"
+            "• 'Trough level (just prior to next dose)': Select ONLY if the paper EXPLICITLY states samples were collected immediately before the next scheduled dose, or uses synonymous terms such as 'pre-dose', 'trough level', or specifies intervals clearly associated with trough for that drug (e.g., '12 hours after last apixaban dose').\n"
+            "• 'Random level': Use ONLY if the text specifies a clock time unrelated to dosing (e.g., 'samples collected from 8 to 10 am') with NO linkage to last or next dose, OR when it is unclear from Methods/Results whether the timing is peak or trough.\n"
+            "• 'Timing not reported': Use if NO explicit timing details regarding sample collection relative to DOAC intake are present in the Methods/Results — even if timing is alluded to elsewhere, or if only generic or unspecific statements exist.\n\n"
+            "Strict IGNORE:\n"
+            "• IGNORE use or paraphrase timing hints from Introduction, Background, Discussion, figure captions (unless the figure is a direct supplement of Methods/Results), or cited literature.\n"
+            "• IGNORE infer that timing is 'trough' or 'peak' based solely on the type of DOAC, manufacturer recommendations, or general pharmacokinetic theory—rely exclusively on the study's own documentation.\n"
+            "• IGNORE assign 'random level' if the sample time actually aligns with a potential peak/trough window but is not specifically stated as such—only choose 'random' if the interval is unlinked or the study is ambiguous.\n"
+            "• Err on the side of reporting 'Timing not reported' rather than guessing or assuming classification where explicitness is lacking.\n\n"
+            "Best Practices:\n"
+            "• If the paper studies multiple timings (e.g., both peak and trough), select ALL relevant options provided each is explicitly described.\n"
+            "• Quote the precise phrases from the Methods/Results supporting assignment of each selected category (in the companion field).\n"
+            "• Remain conservative: if explicitness is in doubt, leave this field null or select 'Timing not reported'."
         ),
     )
     timing_of_measurement_sentence_from_text: Optional[List[str]] = Field(
@@ -873,22 +850,23 @@ class ExtractionOutcomes(BaseModel):
         default=None,
         alias="Reported DOAC concentration thresholds/cutoffs (listed)",
         description=(
-            "CRITICAL: Include ALL numeric DOAC concentration thresholds/cutoffs explicitly listed by the study "
-            "in Methods/Results (e.g., 30 ng/mL, 50 ng/mL, 75 ng/mL, 100 ng/mL). "
-            "Include only if stated for THIS study (not background or external references).\n\n"
+            "STRICT INCLUSION: Only extract numeric DOAC concentration thresholds/cutoffs that are "
+            "explicitly and unambiguously listed as thresholds for THIS study in the Methods or Results sections. "
+            "Do NOT infer or assume the existence of a threshold based on background information, external references, figure axes, or general discussion.\n\n"
             "Two-step process:\n"
-            "Step 1 (Evidence): Quote exact sentences from Methods/Results that list numeric thresholds.\n"
-            "Step 2 (Decision): Based ONLY on those quoted sentences, extract all numeric thresholds mentioned.\n\n"
-            "Include a threshold if it appears as:\n"
-            "• A numeric value with units (e.g., '30 ng/mL', '50 ng/mL')\n"
-            "• A cutoff used for analysis, outcomes, or clinical management\n"
-            "• Listed in tables, figures, or text in Methods/Results\n\n"
-            "Use 'Other' for thresholds that are numeric but not one of the standard values (30, 50, 75, 100 ng/mL).\n\n"
-            "Do NOT include if:\n"
-            "• Thresholds are mentioned only in Introduction/Discussion as background.\n"
-            "• Thresholds are from external studies or guidelines without application to THIS study.\n\n"
-            "This field captures ALL thresholds mentioned; separate fields track their specific uses "
-            "(clinical outcomes vs clinical management)."
+            "Step 1 (Evidence): Directly quote exact sentences from the Methods/Results in which a specific numeric threshold is clearly defined or applied to this study's data, analysis, or procedures.\n"
+            "Step 2 (Decision): Only assign a threshold if you find such a quoted sentence containing an explicit numeric threshold with units (e.g., '30 ng/mL', '50 ng/mL') in the eligible sections.\n\n"
+            "INCLUDE a threshold if and only if ALL of the following are TRUE:\n"
+            "• The numeric value AND units (e.g., 'ng/mL') are clearly stated.\n"
+            "• The threshold is used to define eligibility, analysis groups, clinical actions, or results for THIS study.\n"
+            "• The sentence (or table/figure legend) is from the Methods or Results of THIS manuscript (not from introduction, discussion, supplementary, or background/references).\n"
+            "• The threshold is not merely a reference to an external guideline, prior study, or general literature. Apply only if the threshold is applied or explicitly discussed as relevant in THIS study context.\n\n"
+            "Use 'Other' if a numeric threshold is applied in the study but is not exactly one of 30, 50, 75, or 100 ng/mL.\n\n"
+            "IGNORE if:\n"
+            "• The only reference is from the Introduction, Background, Discussion, or external sources.\n"
+            "• The threshold is cited in the context of previous work with no evidence it was relevant or used in THIS study.\n"
+            "• The value appears in the study only as a reference range, PK summary, manufacturer insert, or generic literature background.\n\n"
+            "Be conservative: If you are not certain a threshold was directly listed and used in this study’s Methods/Results, LEAVE THIS FIELD NULL. Err on the side of under-reporting, not over-reporting."
         ),
     )
 
@@ -942,7 +920,7 @@ class ExtractionOutcomes(BaseModel):
             "1) The manuscript explicitly states the threshold was applied to guide clinical decisions "
             "   (surgery timing, reversal administration, thrombolysis eligibility, dose adjustment, etc.).\n"
             "2) The threshold was used in actual clinical decision-making, not just for analysis/performance evaluation.\n\n"
-            "Do NOT include thresholds if:\n"
+            "IGNORE thresholds if:\n"
             "• They are used purely for analysis/performance (e.g., ROC cut-offs, sensitivity/specificity calculations).\n"
             "• They are used to evaluate associations with clinical outcomes (e.g., 'bleeding risk was higher at levels >100 ng/mL') "
             "   → These are outcome associations, not management decisions.\n"
@@ -1029,7 +1007,7 @@ class ExtractionOutcomes(BaseModel):
             "Include an outcome ONLY if:\n"
             "1) The Methods explicitly states it was recorded/assessed/evaluated as an outcome.\n"
             "2) The Results section reports actual events OR explicitly states 'no events occurred'.\n\n"
-            "Do NOT include outcomes if:\n"
+            "IGNORE outcomes if:\n"
             "• They appear only in Introduction/Background (e.g., 'AF is associated with increased stroke risk').\n"
             "• They are from an underlying registry or external trial, not THIS study.\n"
             "• Only baseline descriptions or planned follow-up are mentioned without actual events in Results.\n"
@@ -1083,7 +1061,7 @@ class ExtractionOutcomes(BaseModel):
             "1) The outcome was explicitly measured (see 'Clinical outcomes' field).\n"
             "2) There is an explicit description of follow-up duration in Methods or Results "
             "   (e.g., 'Patients were followed for 6 months...', 'Follow-up was 30 days...').\n\n"
-            "Do NOT include follow-up duration if:\n"
+            "IGNORE follow-up duration if:\n"
             "• The study mentions imaging or days of observation but does NOT explicitly state follow-up for clinical events.\n"
             "• Follow-up is inferred from a different cohort (e.g., underlying registry) rather than THIS study.\n"
             "• Only baseline characteristics or planned follow-up are mentioned without explicit duration for outcome ascertainment.\n"
@@ -1177,8 +1155,9 @@ class ExtractionDiagnosticPerformance(BaseModel):
     4) If ambiguous, set null (do not guess).
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) Do not use external knowledge.
+    7) IGNORE external knowledge.
     8) Ignore Introduction/Background, References and Acknowledgments content.
+    9) Focus on Methods and Results and Abstract sections.
     """
 
     # Diagnostic performance metrics for categorical cutoffs
@@ -1211,7 +1190,7 @@ class ExtractionDiagnosticPerformance(BaseModel):
             "• Heparin-calibrated anti-Xa assays (IU/mL)\n"
             "• Viscoelastic testing (ROTEM/TEG)\n"
             "• Thrombin generation assays (TGA)\n\n"
-            "Do NOT include if:\n"
+            "IGNORE if:\n"
             "• Metrics are reported only for assay validation (e.g., LC-MS vs calibrated anti-Xa) without categorical cutoffs.\n"
             "• Only correlation coefficients are reported (those belong in 'Diagnostic Performance Metrics - Continuous Relationships').\n"
             "• Metrics are mentioned in Discussion but not explicitly reported in Results.\n\n"
@@ -1252,7 +1231,7 @@ class ExtractionDiagnosticPerformance(BaseModel):
             "• Heparin-calibrated anti-Xa assays (IU/mL)\n"
             "• Viscoelastic testing (ROTEM/TEG)\n"
             "• Thrombin generation assays (TGA)\n\n"
-            "Do NOT include if:\n"
+            "IGNORE if:\n"
             "• Only categorical metrics (sensitivity/specificity) are reported (those belong in 'Diagnostic Performance Metrics - Categorical Cutoffs').\n"
             "• Correlation is mentioned qualitatively without a numeric coefficient.\n"
             "• Correlation is mentioned in Discussion but not explicitly reported in Results.\n\n"
@@ -1307,7 +1286,7 @@ class ExtractionDiagnosticPerformance(BaseModel):
             "• 'Anti-Xa assays with LMWH calibrators (IU/mL)' = Heparin-calibrated anti-Xa assays (not DOAC-specific) used as comparator\n"
             "• 'Viscoelastic testing' = ROTEM/TEG/viscoelastic testing used as comparator\n"
             "• 'Thrombin generation assays' = TGA/CAT/thrombin generation used as comparator\n\n"
-            "Do NOT include if:\n"
+            "IGNORE if:\n"
             "• Comparator assays are mentioned but no diagnostic performance metrics are reported.\n"
             "• The comparison is for assay validation (e.g., LC-MS vs calibrated anti-Xa) without diagnostic performance metrics.\n"
             "• Only qualitative statements about correlation exist without numeric metrics.\n\n"
