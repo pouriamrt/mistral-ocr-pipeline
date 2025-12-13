@@ -8,6 +8,7 @@ dependencies = [
     "aiofiles>=24.1.0",
     "alive-progress>=3.3.0",
     "bnlearn>=0.12.2",
+    "cyclonedx-bom>=7.2.1",
     "d3blocks>=1.6.1",
     "diagrams>=0.25.1",
     "dotenv>=0.9.9",
