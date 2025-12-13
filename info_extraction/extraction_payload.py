@@ -56,7 +56,7 @@ class ExtractionMetaDesign(BaseModel):
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
     7) Do not use external knowledge.
-    8) Ignore References and Acknowledgments content.
+    8) Ignore Introduction/Background, References and Acknowledgments content.
     """
 
     # Journal & author info
@@ -177,7 +177,7 @@ class ExtractionPopulationIndications(BaseModel):
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
     7) Do not use external knowledge.
-    8) Ignore References and Acknowledgments content.
+    8) Ignore Introduction/Background, References and Acknowledgments content.
     """
 
     # Patient population
@@ -378,7 +378,7 @@ class ExtractionMethods(BaseModel):
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
     7) Do not use external knowledge.
-    8) Ignore References and Acknowledgments content.
+    8) Ignore Introduction/Background, References and Acknowledgments content.
     """
 
     doac_level_measurement: Optional[
@@ -542,14 +542,48 @@ class ExtractionMethods(BaseModel):
             "Include a variable ONLY if:\n"
             "1) It is explicitly described in Methods (not just mentioned in Discussion/Background).\n"
             "2) It was applied to the specimens measured in THIS study (not background examples).\n\n"
+            "KEYWORD SUGGESTIONS FOR IDENTIFICATION:\n\n"
+            "1) Blood collection procedures:\n"
+            "Core indicator terms: venipuncture, phlebotomy, blood draw / blood sampling / blood collection, "
+            "venous blood / peripheral venous blood, antecubital vein / antecubital fossa, butterfly needle, "
+            "needle gauge / 21‑gauge / 22‑gauge / 21G / 22G, tourniquet / tourniquet application, "
+            "vacutainer / vacuum collection system\n"
+            'Procedure/context phrases: "blood was collected from", "venous blood was drawn using", '
+            '"single venipuncture" / "single blood draw", "non‑traumatic venipuncture", '
+            '"without stasis" / "minimal stasis", "fasting state" / "after an overnight fast", '
+            '"subject seated / supine for X minutes before sampling", "time of day of blood collection" '
+            '("morning sample", "pre‑dose", "trough sample")\n\n'
+            "2) Collection tube type:\n"
+            "Core tube descriptors: collection tube / blood collection tube, coagulation tube / citrate tube / "
+            '"blue‑top tube", plasma tube / serum tube / plain tube, Vacutainer / BD Vacutainer, '
+            "Sarstedt / Greiner / Monovette (manufacturer names)\n"
+            "Anticoagulant / additive keywords: sodium citrate / Na‑citrate / citrated tube, "
+            "3.2% citrate / 3.8% citrate / 0.109 mol/L citrate, EDTA / K2EDTA / K3EDTA, "
+            'heparin / lithium heparin / Na‑heparin, "no additive" / "additive‑free" / "clot activator", '
+            '"gel separator" / serum separator tube (SST)\n'
+            'Typical phrases: "blood was collected into [X] tubes", '
+            '"blood was drawn into 2.7 mL 3.2% sodium citrate tubes (Becton Dickinson)", '
+            '"citrated plasma obtained from 3.2% sodium citrate Vacutainer tubes"\n\n'
+            "3) Centrifugation speed:\n"
+            "Core process terms: centrifuge / centrifugation, spun / spin / spun down, "
+            "relative centrifugal force / RCF, g‑force / ×g / x g, rpm / revolutions per minute\n"
+            'Typical formats: "centrifuged at 1,500 × g for 10 min", "centrifuged at 2,500g for 15 minutes", '
+            '"spun at 3,000 rpm for 10 min", "double centrifugation" / "two‑step centrifugation", '
+            '"to obtain platelet‑poor plasma (PPP)", "centrifuged at room temperature" / "centrifuged at 4°C"\n\n'
+            "4) Storage temperature:\n"
+            "Core temperature + storage terms: stored at / kept at / maintained at, "
+            "frozen at / immediately frozen / snap frozen, refrigerated / kept at 4°C, "
+            "room temperature / ambient temperature / RT, long‑term storage / short‑term storage, "
+            "aliquots / aliquoted and stored\n"
+            "Temperature formats: −80°C / -80°C, −70°C / -70°C, −20°C / -18°C, 4°C / 2–8°C, "
+            '20–25°C / "room temperature" / "ambient"\n'
+            'Typical phrases: "plasma samples were aliquoted and stored at −80°C until analysis", '
+            '"samples were kept at 4°C and analyzed within 4 hours", '
+            '"serum was stored at −20°C before batch analysis", "samples were kept at room temperature"\n\n'
             "Common errors to avoid:\n"
             "• False negatives: Leaving this blank even when centrifugation speed, temperature, storage are clearly described in Methods.\n"
-            "• Including variables mentioned only in Discussion/Background without Methods description.\n\n"
-            "Examples:\n"
-            "• Blood collection procedures → needle gauge / tourniquet\n"
-            "• Collection tube type → e.g., 2.7% citrate BD\n"
-            "• Centrifugation speed → e.g., 1500g\n"
-            "• Storage temperature → e.g., -80°C\n\n"
+            "• Including variables mentioned only in Discussion/Background without Methods description.\n"
+            "• Missing variables when keywords/phrases are present but not recognized.\n\n"
             "If the article does not clearly report pre-analytical variables, leave null. Do NOT guess."
         ),
     )
@@ -570,20 +604,112 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="Conventional Coagulation Tests Concurrently Reported",
         description=(
-            "CRITICAL: Scan the ENTIRE Methods section for conventional coagulation test terms. "
+            "CRITICAL: Scan the ENTIRE Methods and Results sections for conventional coagulation test terms. "
             "Include ONLY if explicitly described as performed on the same specimens as DOAC level measurement.\n\n"
+            "FIRST FILTER: Only count tests actually measured in the study\n"
+            "Apply these constraints strictly:\n\n"
+            "1) Restrict to Methods / Results sections:\n"
+            '   • Only count mentions that appear under headings such as "Methods", "Materials and Methods", '
+            '"Laboratory methods", "Study procedures", "Results", "Outcomes", "Baseline characteristics", '
+            '"Laboratory results", etc.\n'
+            "   • Or in text that clearly describes what was done to study participants or what was measured at baseline/follow-up.\n\n"
+            '2) Require a "measurement context" near the test name:\n'
+            "   Only count PT/aPTT as measured if the sentence (or the one immediately before/after) contains at least one of:\n"
+            '   • "measured", "was measured", "were measured"\n'
+            '   • "determined", "assessed", "tested", "performed"\n'
+            '   • "recorded", "collected", "obtained"\n'
+            '   • "available", "included", "reported" (when referring to baseline or follow-up lab values)\n'
+            '   • Or appears in a description of a table of baseline labs (e.g., "Table 1. Baseline laboratory parameters including PT, aPTT …").\n\n'
+            "3) Explicitly ignore Introduction/Background-only mentions:\n"
+            "   If PT or aPTT is mentioned only in:\n"
+            '   • General background (e.g., "PT and aPTT are widely used to assess coagulation")\n'
+            "   • Description of standard practice, guidelines, or prior literature\n"
+            "   and there is no measurement context as above, then do NOT flag the study as having measured PT or aPTT.\n\n"
             "Two-step process:\n"
-            "Step 1 (Evidence): Quote exact sentences from Methods that describe which conventional coagulation tests were performed. "
+            "Step 1 (Evidence): Quote exact sentences from Methods/Results that describe which conventional coagulation tests were performed. "
             "Look for explicit listings like 'PT, aPTT, and TT were measured' or 'coagulation tests included PT and aPTT'.\n"
             "Step 2 (Decision): Based ONLY on those quoted sentences, classify the tests.\n\n"
+            "PT (PROTHROMBIN TIME) – KEYWORDS AND RULES:\n\n"
+            "1) Strong PT keywords (test names):\n"
+            "   Flag PT as measured if any of the following appear in Methods/Results with a measurement context:\n"
+            '   • Full names: "prothrombin time", "Quick prothrombin time", "Quick test", "Quick\'s test"\n'
+            '   • Combined terms: "PT/INR", "PT‑INR", "prothrombin time/INR", "prothrombin time (PT)/international normalized ratio (INR)"\n'
+            '   • Abbreviations: "prothrombin time (PT)" → subsequent "PT", "PT (prothrombin time)"\n'
+            '   • Additional indicators: "prothrombin ratio", "prothrombin activity" (esp. if combined with "Quick" or PT reagents)\n\n'
+            "2) INR as a PT proxy:\n"
+            "   INR is essentially specific to PT. If an article says in Methods/Results:\n"
+            '   • "INR was measured", "we determined INR", "baseline INR", "we recorded INR", and\n'
+            '   • there is no contrary indication that "INR" is being used in some nonstandard way,\n'
+            "   you can safely treat that as PT measured, since INR is defined as a standardized transformation of the PT.\n"
+            '   Rule: If "INR" appears with measurement verbs in Methods/Results, flag PT = yes (even if "PT" is not explicitly written).\n\n'
+            "3) PT-specific reagents (positive list):\n"
+            "   Many papers only name the reagent. The following are PT reagents (thromboplastin-based) and should count as PT, not aPTT, "
+            "when in measurement context:\n"
+            "   • Thromborel S (Dade/Siemens) – PT reagent\n"
+            "   • Dade Innovin (Innovin) – recombinant thromboplastin PT reagent\n"
+            "   • Neoplastin / Néoplastine / Neoplastine CI Plus / STA‑Neoplastine – PT reagents\n"
+            "   • STA‑NeoPTimal – PT/INR reagent\n"
+            "   • Thrombotest – PT (Quick/Owren type)\n"
+            "   • Normotest / Normotest Automated / Normotest® – PT (combined thromboplastin)\n"
+            "   • RecombiPlasTin / RecombiPlasTin 2G – PT reagent\n"
+            "   • Spinreact Prothrombin time reagent\n"
+            "   • Technoclot PT Owren – PT reagent replacing Thrombotest/Normotest\n"
+            '   • Generic phrases like "prothrombin time reagent containing thromboplastin and calcium chloride"\n'
+            "   Rule: If any of these reagent names occur in Methods/Results with measurement verbs or explicit mention of clotting time, "
+            'classify PT measured, even if the text doesn\'t restate "PT" in that sentence.\n\n'
+            "4) Thromboplastin and PT (critical distinction):\n"
+            "   Key biochemical point: Thromboplastin reagents are standard for PT, NOT for aPTT. PT testing requires a thromboplastin reagent "
+            "(tissue factor + phospholipid + Ca²⁺).\n"
+            "   Therefore:\n"
+            '   • "thromboplastin" by itself does NOT imply aPTT.\n'
+            '   • If "thromboplastin" appears in the context of Thromborel S, Innovin, Neoplastin, Thrombotest, Normotest, Technoclot PT, etc., '
+            'or "prothrombin time reagent", treat this as PT, not aPTT.\n'
+            '   • Only count aPTT if the text includes "partial thromboplastin", "aPTT", "APTT", "PTT" (clearly defined as partial '
+            'thromboplastin time), or an explicit aPTT reagent name. The word "thromboplastin" alone is NEVER sufficient for aPTT.\n\n'
+            "aPTT (ACTIVATED PARTIAL THROMBOPLASTIN TIME) – KEYWORDS AND RULES:\n\n"
+            "1) Strong aPTT keywords (test names):\n"
+            "   Flag aPTT as measured if any of these appear in Methods/Results with measurement context:\n"
+            '   • Full names: "activated partial thromboplastin time", "partial thromboplastin time"\n'
+            '   • Abbreviations: "aPTT", "APTT", "A‑PTT"\n'
+            '   • "PTT" or "partial thromboplastin time (PTT)" when clearly defined as such\n'
+            '   • Historical synonyms: "kaolin‑cephalin clotting time", "kaolin cephalin clotting time", "KCCT"\n\n'
+            "2) aPTT-specific reagents (positive list):\n"
+            "   These reagents are aPTT reagents and should be treated as aPTT, not PT, if used to measure a clotting time:\n"
+            '   • Dade Actin® reagents (all "Actin" APTT formulations): Dade Actin® Activated Cephaloplastin, Dade Actin FS Activated PTT, '
+            "Dade Actin FSL Activated PTT\n"
+            "   • Pathromtin® SL – APTT reagent\n"
+            "   • STA‑PTT Automate – APTT reagent\n"
+            "   • STA Cephascreen – APTT reagent\n"
+            '   • Phrases like "APTT reagent", "activated PTT reagent"\n'
+            '   Rule: If any of these aPTT reagents are mentioned in Methods/Results with measurement verbs (e.g., "aPTT was measured using '
+            'Pathromtin SL"), classify aPTT measured.\n\n'
+            '3) Handling "PTT" alone:\n'
+            '   "PTT" alone is ambiguous in pure text, but in clinical/lab contexts it almost always means partial thromboplastin time.\n'
+            "   Practical rules:\n"
+            '   • If the article at any point defines the abbreviation: "partial thromboplastin time (PTT)" or "activated partial '
+            'thromboplastin time (aPTT)", then any subsequent "PTT"/"aPTT" in Methods/Results with measurement context → aPTT measured.\n'
+            '   • If the only occurrence is something like "PT/INR and PTT were measured", and earlier they defined "PTT" as partial '
+            "thromboplastin time, treat as PT = yes, aPTT = yes.\n"
+            '   • If "PTT" is never defined and occurs in a single generic list without context, interpret it as partial thromboplastin time '
+            "if there is measurement context.\n\n"
+            "4) Negative/ambiguous cases for aPTT:\n"
+            "   Do NOT classify as aPTT if:\n"
+            '   • Only "thromboplastin" is mentioned without "partial".\n'
+            "   • Only PT reagents (Thromborel S, Innovin, Neoplastin, Thrombotest, Normotest, etc.) are named.\n"
+            '   • aPTT is mentioned only in a phrase like "Routine coagulation tests such as PT and aPTT are widely used…" in the Introduction, '
+            "with no measurement context in Methods/Results.\n\n"
             "Include a test ONLY if:\n"
-            "1) It is explicitly listed in Methods as performed (not just mentioned in Discussion/Background).\n"
-            "2) It was performed on the same specimens as DOAC level measurement.\n\n"
+            "1) It is explicitly listed in Methods/Results as performed (not just mentioned in Discussion/Background/Introduction).\n"
+            "2) It was performed on the same specimens as DOAC level measurement.\n"
+            '3) There is a measurement context (verbs like "measured", "determined", "assessed", "performed", "recorded", etc.).\n\n'
             "Common errors to avoid:\n"
-            "• False negatives: Leaving this blank despite a clear Methods paragraph listing PT/aPTT/TT.\n"
-            "• False positives: Inferring aPTT from the word 'thromboplastin' when only PT is actually measured.\n"
-            "• Inferring aPTT when only PT is reported: Reporting PT alone does NOT imply aPTT was performed.\n\n"
-            "If the article does not clearly report which conventional tests were performed, leave null. Do NOT guess."
+            "• False negatives: Leaving this blank despite a clear Methods paragraph listing PT/aPTT with measurement context.\n"
+            '• False positives: Inferring aPTT from the word "thromboplastin" when only PT is actually measured (thromboplastin = PT reagent).\n'
+            "• Inferring aPTT when only PT is reported: Reporting PT alone does NOT imply aPTT was performed.\n"
+            "• Counting tests mentioned only in Introduction/Background without Methods/Results measurement context.\n"
+            "• Missing PT when only INR is mentioned (INR is a PT proxy).\n"
+            "• Missing PT when only PT reagent names are mentioned (e.g., Thromborel S, Innovin, Neoplastin).\n\n"
+            "If the article does not clearly report which conventional tests were performed with measurement context, leave null. Do NOT guess."
         ),
     )
     coagulation_tests_concurrent_sentence_from_text: Optional[List[str]] = Field(
@@ -650,7 +776,7 @@ class ExtractionOutcomes(BaseModel):
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
     7) Do not use external knowledge.
-    8) Ignore References and Acknowledgments content.
+    8) Ignore Introduction/Background, References and Acknowledgments content.
     """
 
     # Timing of DOAC Level Measurement Relative to DOAC Intake
@@ -1010,7 +1136,7 @@ class ExtractionDiagnosticPerformance(BaseModel):
     5) Numeric values must be exact.
     6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
     7) Do not use external knowledge.
-    8) Ignore References and Acknowledgments content.
+    8) Ignore Introduction/Background, References and Acknowledgments content.
     """
 
     # Diagnostic performance metrics for categorical cutoffs
