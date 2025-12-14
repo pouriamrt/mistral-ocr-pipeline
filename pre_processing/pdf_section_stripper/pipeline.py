@@ -60,8 +60,9 @@ class PDFSectionStripper:
         input_path = Path(input_path)
         output_path = Path(output_path)
 
-        doc = fitz.open(str(input_path))
+        doc = None
         try:
+            doc = fitz.open(str(input_path))
             outline_cuts = detect_cuts_from_outline(doc, self.cfg)
             layout_cuts = detect_cuts_from_layout(doc, self.cfg)
 
@@ -81,4 +82,5 @@ class PDFSectionStripper:
                 cuts=plan.cuts,
             )
         finally:
-            doc.close()
+            if doc is not None:
+                doc.close()
