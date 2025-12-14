@@ -161,6 +161,13 @@ class ExtractionMetaDesign(BaseModel):
         alias="Study Design Sentence from Text",
         description="Exact sentences or paragraph containing the study design.",
     )
+    study_design_confidence_score: int = Field(
+        default=0,
+        alias="Study Design Confidence Score",
+        description="Confidence score for the study design classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -291,6 +298,13 @@ class ExtractionPopulationIndications(BaseModel):
         alias="Relevant Subgroups Sentence from Text",
         description="Exact sentences or paragraph containing the relevant subgroups.",
     )
+    relevant_subgroups_confidence_score: int = Field(
+        default=0,
+        alias="Relevant Subgroups Confidence Score",
+        description="Confidence score for the relevant subgroups classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
+    )
 
     # Indications for DOAC level measurement
     indications_for_doac_level_measurement: Optional[
@@ -362,6 +376,13 @@ class ExtractionPopulationIndications(BaseModel):
             alias="Indications for DOAC Level Measurement Sentence from Text",
             description="Exact sentences or paragraph containing the indications for DOAC level measurement.",
         )
+    )
+    indications_for_doac_level_measurement_confidence_score: int = Field(
+        default=0,
+        alias="Indications for DOAC Level Measurement Confidence Score",
+        description="Confidence score for the indications for DOAC level measurement classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -466,6 +487,13 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="DOAC Level Measurement Sentence from Text",
         description="Exact sentences or paragraph containing the DOAC level measurement.",
+    )
+    doac_level_measurement_confidence_score: int = Field(
+        default=0,
+        alias="DOAC Level Measurement Confidence Score",
+        description="Confidence score for the DOAC level measurement classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
     )
 
     doac_level_measurement_descriptors: Optional[
@@ -663,6 +691,13 @@ class ExtractionMethods(BaseModel):
         alias="Pre-Analytical Variables Sentence from Text",
         description="Exact sentences or paragraph containing the pre-analytical variables.",
     )
+    pre_analytical_variables_confidence_score: int = Field(
+        default=0,
+        alias="Pre-Analytical Variables Confidence Score",
+        description="Confidence score for the pre-analytical variables classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
+    )
 
     # Conventional Coagulation Tests Concurrently Reported
     coagulation_tests_concurrent: Optional[
@@ -736,6 +771,13 @@ class ExtractionMethods(BaseModel):
         alias="Conventional Coagulation Tests Concurrently Reported Sentence from Text",
         description="Exact sentences with the conventional coagulation tests concurrently reported.",
     )
+    coagulation_tests_concurrent_confidence_score: int = Field(
+        default=0,
+        alias="Conventional Coagulation Tests Concurrently Reported Confidence Score",
+        description="Confidence score for the conventional coagulation tests concurrently reported classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
+    )
 
     # Global Coagulation Testing
     global_coagulation_tests: Optional[
@@ -777,6 +819,13 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="Global Coagulation Testing Sentence from Text",
         description="Exact sentences or paragraph containing the global coagulation tests.",
+    )
+    global_coagulation_tests_confidence_score: int = Field(
+        default=0,
+        alias="Global Coagulation Tests Confidence Score",
+        description="Confidence score for the global coagulation tests classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -846,6 +895,13 @@ class ExtractionOutcomes(BaseModel):
         alias="Timing of DOAC Level Measurement Relative to DOAC Intake Sentence from Text",
         description="Exact sentences or paragraph containing the timing of DOAC level measurement relative to DOAC intake.",
     )
+    timing_of_measurement_confidence_score: int = Field(
+        default=0,
+        alias="Timing of DOAC Level Measurement Relative to DOAC Intake Confidence Score",
+        description="Confidence score for the timing of DOAC level measurement relative to DOAC intake classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
+    )
 
     # A) thresholds the paper LISTS anywhere in its methods/results
     thresholds_listed: Optional[
@@ -872,6 +928,13 @@ class ExtractionOutcomes(BaseModel):
             "• The value appears in the study only as a reference range, PK summary, manufacturer insert, or generic literature background.\n\n"
             "Be conservative: If you are not certain a threshold was directly listed and used in this study’s Methods/Results, LEAVE THIS FIELD NULL. Err on the side of under-reporting, not over-reporting."
         ),
+    )
+    thresholds_listed_confidence_score: int = Field(
+        default=0,
+        alias="Reported DOAC concentration thresholds/cutoffs (listed) Confidence Score",
+        description="Confidence score for the reported DOAC concentration thresholds/cutoffs (listed) classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
     )
 
     # B) thresholds USED to inform CLINICAL MANAGEMENT, flattened as threshold × context
@@ -944,6 +1007,13 @@ class ExtractionOutcomes(BaseModel):
         alias="Thresholds used to inform clinical management Sentence from Text",
         description="Exact sentences or paragraph confirming that the thresholds were used to inform clinical management.",
     )
+    thresholds_used_for_management_confidence_score: int = Field(
+        default=0,
+        alias="Thresholds used to inform clinical management Confidence Score",
+        description="Confidence score for the thresholds used to inform clinical management classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
+    )
 
     # Turnaround Time
     turnaround_time: Optional[str] = Field(
@@ -985,6 +1055,13 @@ class ExtractionOutcomes(BaseModel):
             "clinical_outcome_followup_flat, clinical_outcome_definition_flat) MUST be null/NA.\n\n"
             "If unclear after checking Methods and Results, set to null and leave all outcome-related fields null."
         ),
+    )
+    clinical_outcomes_measured_confidence_score: int = Field(
+        default=0,
+        alias="Clinical Outcomes Measured Confidence Score",
+        description="Confidence score for the clinical outcomes measured classification. A number between 0 and 100, where 0 is the lowest confidence and 100 is the highest confidence.",
+        ge=0,
+        le=100,
     )
 
     # Clinical Outcomes
