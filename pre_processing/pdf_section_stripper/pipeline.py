@@ -68,9 +68,8 @@ class PDFSectionStripper:
 
             plan = build_plan(doc, outline_cuts, layout_cuts, self.cfg)
 
-            if self.cfg.debug:
-                logger.debug(f"Cuts: {plan.cuts}")
-                logger.debug(f"Keep pages: {len(plan.keep_pages)} / {doc.page_count}")
+            logger.debug(f"Cuts: {plan.cuts}")
+            logger.debug(f"Keep pages: {len(plan.keep_pages)} / {doc.page_count}")
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
             write_stripped_pdf(doc, plan, str(output_path))

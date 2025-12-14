@@ -59,10 +59,9 @@ def build_plan(
                     continue
                 keep_pages.discard(i)
         else:
-            if cfg.debug:
-                logger.debug(
-                    "Planner: Methods boundary not found or not after intro; skipping intro removal for safety."
-                )
+            logger.debug(
+                "Planner: Methods boundary not found or not after intro; skipping intro removal for safety."
+            )
 
     # Always keep first N pages (safety)
     for i in range(min(cfg.keep_first_n_pages_always, n)):

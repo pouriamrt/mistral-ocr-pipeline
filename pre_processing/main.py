@@ -35,7 +35,6 @@ def main():
         keep_abstract_pages=1,
         max_scan_pages_for_intro=12,
         min_heading_score=78,
-        debug=True,
     )
     # ----------------------------------------------
 

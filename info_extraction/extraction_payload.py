@@ -1010,7 +1010,7 @@ class ExtractionOutcomes(BaseModel):
             "Step 2 (Decision): Based ONLY on those quoted sentences, classify the outcome type.\n\n"
             "Include an outcome ONLY if:\n"
             "1) The Methods explicitly states it was recorded/assessed/evaluated as an outcome.\n"
-            "2) The Results section reports actual events OR explicitly states 'no events occurred'.\n\n"
+            "2) The Results section reports actual events OR explicitly states 'no events occurred'. Focus more on the Results section than the Methods section.\n\n"
             "IGNORE outcomes if:\n"
             "• They appear only in Introduction/Background (e.g., 'AF is associated with increased stroke risk').\n"
             "• They are from an underlying registry or external trial, not THIS study.\n"

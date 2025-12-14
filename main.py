@@ -26,6 +26,7 @@ from utils.utils import (
 install(show_locals=True)
 load_dotenv(override=True)
 
+INPUT_DIR = Path(os.getenv("INPUT_DIR", "papers/todo_stripped"))
 OUTPUT_DIR = Path("output")
 FINAL_OUTPUT_DIR = OUTPUT_DIR / "aggregated"
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
@@ -175,10 +176,9 @@ async def amain():
         columns = [*df_cols_from_models(), "__source_file__"]
 
         async with Mistral(api_key=api_key) as client:
-            path_to_pdfs = "papers/todo"
-            list_of_pdfs = list(Path(path_to_pdfs).glob("*.pdf"))
+            list_of_pdfs = list(INPUT_DIR.glob("*.pdf"))
             if not list_of_pdfs:
-                logger.error(f"No PDFs found in {path_to_pdfs}")
+                logger.error(f"No PDFs found in {INPUT_DIR}")
                 return
 
             todo = [

@@ -12,12 +12,10 @@ class StripConfig:
     # Safety and heuristics
     keep_first_n_pages_always: int = 1  # title page
     keep_abstract_pages: int = 1  # page after title often has abstract
-    max_scan_pages_for_intro: int = 12  # only early pages scanned for intro/methods
-    min_heading_score: int = 78  # fuzzy threshold
+    max_scan_pages_for_intro: int = 5  # only early pages scanned for intro/methods
+    min_heading_score: int = 70  # fuzzy threshold
 
     # Heading-likeness (layout-based, not regex)
-    heading_min_fontsize_ratio: float = 1.15  # heading font / median font
+    heading_min_fontsize_ratio: float = 1.1  # heading font / median font
     heading_max_chars: int = 80  # headings are rarely long
     require_methods_to_drop_intro: bool = True
-
-    debug: bool = False
