@@ -26,7 +26,7 @@ from utils.utils import (
 install(show_locals=True)
 load_dotenv(override=True)
 
-INPUT_DIR = Path(os.getenv("INPUT_DIR", "papers/todo_stripped"))
+INPUT_DIR = Path(os.getenv("INPUT_DIR", "papers/todo"))
 OUTPUT_DIR = Path("output")
 FINAL_OUTPUT_DIR = OUTPUT_DIR / "aggregated"
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
