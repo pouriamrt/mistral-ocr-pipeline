@@ -171,6 +171,19 @@ async def amain():
         csv_path = FINAL_OUTPUT_DIR / "df_annotations.csv"
         parquet_path = FINAL_OUTPUT_DIR / "df_annotations.parquet"
 
+        # Delete the files if OVERWRITE_MD is True
+        if OVERWRITE_MD:
+            for file in FINAL_OUTPUT_DIR.iterdir():
+                if (
+                    file.name in ("df_annotations.csv", "df_annotations.parquet")
+                    and file.is_file()
+                ):
+                    try:
+                        file.unlink()
+                        logger.info(f"Deleted {file}")
+                    except Exception as e:
+                        logger.warning(f"Could not delete {file}: {e}")
+
         # Resume index: skip files that already exist in CSV if OVERWRITE_MD is False
         already_processed = load_existing_index(csv_path) if not OVERWRITE_MD else set()
         columns = [*df_cols_from_models(), "__source_file__"]
