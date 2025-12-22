@@ -192,13 +192,24 @@ def table_cast_like(table: pa.Table, target_schema: pa.schema) -> pa.Table:
     - Adds any missing columns as null.
     - Drops extra columns not in target schema.
     """
+
+    def _is_null_type(arrow_type):
+        """Check if type is null or contains null (e.g., list<item: null>)."""
+        if pa.types.is_null(arrow_type):
+            return True
+        if pa.types.is_list(arrow_type) or pa.types.is_large_list(arrow_type):
+            return _is_null_type(arrow_type.value_type)
+        return False
+
     cols = []
     for field in target_schema:
         name = field.name
         if name in table.column_names:
             col = table[name]
-            if pa.types.is_null(field.type):
-                cols.append(pa.nulls(len(table), type=pa.null()))
+            # Check if target type is null (including nested nulls in lists)
+            if _is_null_type(field.type):
+                # If target expects null but source has data, convert to null
+                cols.append(pa.nulls(len(table), type=field.type))
                 continue
             # Try to cast if needed
             try:
