@@ -144,6 +144,12 @@ COMMON_EDGE_ATTR = {
     "arrowsize": "0.8",
 }
 
+COMMON_CLUSTER_ATTR = {
+    "style": "rounded,filled",
+    "fillcolor": "#F3F2EE",
+    "color": "#F3F2EE",
+}
+
 
 # ---------------------------
 # 1. INGESTION (COMPACT)
@@ -158,7 +164,7 @@ with Diagram(
     node_attr=COMMON_NODE_ATTR,
     edge_attr=COMMON_EDGE_ATTR,
 ):
-    with Cluster("1. Ingestion and Resume Logic"):
+    with Cluster("1. Ingestion and Resume Logic", graph_attr=COMMON_CLUSTER_ATTR):
         ingest = PDF("Load PDF corpus\n+ read bytes")
         fingerprints = PythonStep("Fingerprint\n(SHA1 + page count)")
         validate = Decision("Valid PDF?")
@@ -190,7 +196,7 @@ with Diagram(
     node_attr=COMMON_NODE_ATTR,
     edge_attr=COMMON_EDGE_ATTR,
 ):
-    with Cluster("2. Chunking and Async Scheduling"):
+    with Cluster("2. Chunking and Async Scheduling", graph_attr=COMMON_CLUSTER_ATTR):
         chunk_decision = Decision("Fits in one chunk?")
         single = PythonStep("Single submission")
         multi = PythonStep("Partition pages\ninto chunks")
@@ -219,7 +225,9 @@ with Diagram(
     node_attr=COMMON_NODE_ATTR,
     edge_attr=COMMON_EDGE_ATTR,
 ):
-    with Cluster("3. Mistral OCR and Schema Extraction"):
+    with Cluster(
+        "3. Mistral OCR and Schema Extraction", graph_attr=COMMON_CLUSTER_ATTR
+    ):
         prep = PythonStep("Prepare requests\n+ schemas")
         rate = Gate("Rate-limit\n+ retries")
         ocr = MistralOCR("Mistral OCR\n(page chunks)")
@@ -247,7 +255,7 @@ with Diagram(
     node_attr=COMMON_NODE_ATTR,
     edge_attr=COMMON_EDGE_ATTR,
 ):
-    with Cluster("4. Merge to Study-level"):
+    with Cluster("4. Merge to Study-level", graph_attr=COMMON_CLUSTER_ATTR):
         collect = SQL("Collect chunks\n(SQL)")
         merge = PythonStep("Merge\n(scalars, lists,\n sentence evidence)")
         study = SQL("Study-level\nannotation")
@@ -255,18 +263,18 @@ with Diagram(
 
         chunk_payloads >> collect >> merge >> study >> attach
 
-    with Cluster("5. Tabular Outputs"):
+    with Cluster("5. Tabular Outputs", graph_attr=COMMON_CLUSTER_ATTR):
         tabular = Artifact("CSV + Parquet")
         dataset = SQL("Final dataset\n(schema-conforming)")
         attach >> tabular >> dataset
 
-    with Cluster("6. Markdown Reconstruction"):
+    with Cluster("6. Markdown Reconstruction", graph_attr=COMMON_CLUSTER_ATTR):
         md = Artifact(
             "Study markdown\n(text + captions + images)\n+ structured summary"
         )
         attach >> md
 
-    with Cluster("7. Post-processing"):
+    with Cluster("7. Post-processing", graph_attr=COMMON_CLUSTER_ATTR):
         post = Analytics("Aggregation\n+ stratification\n+ value counts")
         excel = Report("Excel workbook\n+ distributions")
         dataset >> post >> excel
