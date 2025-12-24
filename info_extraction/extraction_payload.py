@@ -51,13 +51,14 @@ class ExtractionMetaDesign(BaseModel):
     Guidelines:
     1) Do not infer or guess.
     2) Use null if unsure.
-    3) Output only facts explicitly in the PDF.
-    4) If ambiguous, set null (do not guess).
-    5) Numeric values must be exact.
-    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) IGNORE external knowledge.
-    8) Ignore Introduction/Background, References and Acknowledgments content.
-    9) Focus on Methods and Results and Abstract sections.
+    3) Select all applicable.
+    4) Output only facts explicitly in the PDF.
+    5) If ambiguous, set null (do not guess).
+    6) Numeric values must be exact.
+    7) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    8) IGNORE external knowledge.
+    9) Ignore Introduction/Background, References and Acknowledgments content.
+    10) Focus on Methods and Results and Abstract sections.
     """
 
     # Journal & author info
@@ -210,13 +211,14 @@ class ExtractionPopulationIndications(BaseModel):
     Guidelines:
     1) Do not infer or guess.
     2) Use null if unsure.
-    3) Output only facts explicitly in the PDF.
-    4) If ambiguous, set null (do not guess).
-    5) Numeric values must be exact.
-    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) IGNORE external knowledge.
-    8) Ignore Introduction/Background, References and Acknowledgments content.
-    9) Focus on Methods and Results and Abstract sections.
+    3) Select all applicable.
+    4) Output only facts explicitly in the PDF.
+    5) If ambiguous, set null (do not guess).
+    6) Numeric values must be exact.
+    7) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    8) IGNORE external knowledge.
+    9) Ignore Introduction/Background, References and Acknowledgments content.
+    10) Focus on Methods and Results and Abstract sections.
     """
 
     # Patient population
@@ -529,13 +531,14 @@ class ExtractionMethods(BaseModel):
     Guidelines:
     1) Do not infer or guess.
     2) Use null if unsure.
-    3) Output only facts explicitly in the PDF.
-    4) If ambiguous, set null (do not guess).
-    5) Numeric values must be exact.
-    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) IGNORE external knowledge.
-    8) Ignore Introduction/Background, References and Acknowledgments content.
-    9) Focus on Methods and Results and Abstract sections.
+    3) Select all applicable.
+    4) Output only facts explicitly in the PDF.
+    5) If ambiguous, set null (do not guess).
+    6) Numeric values must be exact.
+    7) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    8) IGNORE external knowledge.
+    9) Ignore Introduction/Background, References and Acknowledgments content.
+    10) Focus on Methods and Results and Abstract sections.
     """
 
     doac_level_measurement: Optional[
@@ -858,94 +861,74 @@ class ExtractionMethods(BaseModel):
         default=None,
         alias="Pre-Analytical Variables",
         description=(
-            "CRITICAL: Review the entire Methods section for explicit descriptions of pre-analytical variables relating to DOAC level measurement specimens. "
-            "Include only when the procedures were specifically applied to specimens analyzed in THIS study (not background, review, or capability statements).\n\n"
-            "Pre-analytical variables to flag (include only if used in THIS study):\n"
-            "• Blood collection procedures (e.g., needle gauge, tourniquet technique)\n"
-            "• Collection tube type (e.g., 2.7% citrate Becton Dickinson)\n"
-            "• Centrifugation speed\n"
-            "• Storage temperature (e.g., -80°C)\n\n"
-            "Follow a strict two-step process:\n"
-            "Step 1 – Evidence:\n"
-            "  Quote the precise sentences from the Methods section describing collection, tube, centrifugation, or storage procedures for DOAC level specimens.\n"
-            "Step 2 – Decision:\n"
-            "  Flag a variable as present ONLY if there is explicit reporting for samples measured in THIS study.\n\n"
-            "DETAILED KEYWORD GUIDANCE FOR IDENTIFICATION (flag only if present in the Methods):\n\n"
+            "CRITICAL EXTRACTION TASK — READ CAREFULLY\n\n"
+            "You must identify ONLY those pre-analytical variables that are "
+            "EXPLICITLY AND UNAMBIGUOUSLY reported in the METHODS section "
+            "for specimens actually used to measure DOAC plasma levels in THIS study.\n\n"
+            "DEFAULT RULE (MANDATORY):\n"
+            "Assume that NO pre-analytical variables are reported unless explicit "
+            "Methods evidence clearly proves otherwise. Absence is the default.\n\n"
+            "INCLUDE a variable ONLY when:\n"
+            "• The procedure is described in the METHODS section (or equivalent), AND\n"
+            "• It was applied to samples analyzed in THIS study (not background, review, or general lab capability), AND\n"
+            "• There is explicit procedural detail specific to that variable.\n\n"
+            "DO NOT infer, assume, generalize, or extrapolate.\n"
+            "If explicit evidence is missing, DO NOT include the variable.\n\n"
+            "TWO-STEP DECISION PROCESS (STRICTLY REQUIRED):\n\n"
+            "STEP 1 — EVIDENCE CHECK:\n"
+            "Search the METHODS for explicit, specimen-level descriptions of:\n"
+            "• blood collection technique,\n"
+            "• collection tube additives or manufacturers,\n"
+            "• centrifugation conditions,\n"
+            "• storage conditions.\n\n"
+            "If the Methods do NOT explicitly state a procedure for a given variable, "
+            "that variable MUST be excluded.\n\n"
+            "STEP 2 — VARIABLE-SPECIFIC DECISION RULES:\n\n"
             "1. Blood collection procedures:\n"
-            "   Core indicator terms:\n"
-            "   • venipuncture\n"
-            "   • phlebotomy\n"
-            "   • blood draw / blood sampling / blood collection\n"
-            "   • venous blood / peripheral venous blood\n"
-            "   • antecubital vein / antecubital fossa\n"
-            "   • butterfly needle\n"
-            "   • needle gauge / 21‑gauge / 22‑gauge / 21G / 22G\n"
-            "   • tourniquet / tourniquet application\n"
-            "   • vacutainer / vacuum collection system\n"
-            "   Procedure/context phrases:\n"
-            '   • "blood was collected from"\n'
-            '   • "venous blood was drawn using"\n'
-            '   • "single venipuncture" / "single blood draw"\n'
-            '   • "non‑traumatic venipuncture"\n'
-            '   • "without stasis" / "minimal stasis"\n'
-            '   • "fasting state" / "after an overnight fast"\n'
-            '   • "subject seated / supine for X minutes before sampling"\n'
-            '   • "time of day of blood collection" ("morning sample", "pre‑dose", "trough sample")\n\n'
+            "Include ONLY if technique-level venipuncture details are explicitly reported.\n\n"
+            "REQUIRED indicators (at least one must be present):\n"
+            "• needle gauge (e.g., 21G, 22G)\n"
+            "• tourniquet use or stasis description\n"
+            "• venipuncture technique (e.g., single venipuncture, butterfly needle)\n"
+            "• patient positioning or fasting state at blood draw\n"
+            "• explicit phlebotomy protocol details\n\n"
+            "IMPORTANT EXCLUSION RULE:\n"
+            "Generic statements such as:\n"
+            "• 'blood was collected'\n"
+            "• 'peripheral blood samples'\n"
+            "• 'venous blood was obtained'\n"
+            "DO NOT qualify as blood collection procedures and MUST NOT be flagged.\n\n"
             "2. Collection tube type:\n"
-            "   Core tube descriptors:\n"
-            "   • collection tube / blood collection tube\n"
-            '   • coagulation tube / citrate tube / "blue‑top tube"\n'
-            "   • plasma tube / serum tube / plain tube\n"
-            "   • Vacutainer / BD Vacutainer\n"
-            "   • Sarstedt / Greiner / Monovette (manufacturer names)\n"
-            "   Anticoagulant / additive keywords:\n"
-            "   • sodium citrate / Na‑citrate / citrated tube\n"
-            "   • 3.2% citrate / 3.8% citrate / 0.109 mol/L citrate\n"
-            "   • EDTA / K2EDTA / K3EDTA\n"
-            "   • heparin / lithium heparin / Na‑heparin\n"
-            '   • "no additive" / "additive‑free" / "clot activator"\n'
-            '   • "gel separator" / serum separator tube (SST)\n'
-            "   Typical phrases:\n"
-            '   • "blood was collected into [X] tubes"\n'
-            '   • "blood was drawn into 2.7 mL 3.2% sodium citrate tubes (Becton Dickinson)"\n'
-            '   • "citrated plasma obtained from 3.2% sodium citrate Vacutainer tubes"\n\n'
+            "Include ONLY if the tube additive and/or manufacturer is explicitly stated.\n\n"
+            "Valid indicators include:\n"
+            "• EDTA / K2EDTA / K3EDTA\n"
+            "• sodium citrate (with concentration if provided)\n"
+            "• heparin (UFH or LMWH)\n"
+            "• serum or plasma separator tubes\n"
+            "• explicit brand names (e.g., BD Vacutainer, Sarstedt)\n\n"
             "3. Centrifugation speed:\n"
-            "   Core process terms:\n"
-            "   • centrifuge / centrifugation\n"
-            "   • spun / spin / spun down\n"
-            "   • relative centrifugal force / RCF\n"
-            "   • g‑force / ×g / x g\n"
-            "   • rpm / revolutions per minute\n"
-            "   Typical formats:\n"
-            '   • "centrifuged at 1,500 × g for 10 min"\n'
-            '   • "centrifuged at 2,500g for 15 minutes"\n'
-            '   • "spun at 3,000 rpm for 10 min"\n'
-            '   • "double centrifugation" / "two‑step centrifugation"\n'
-            '   • "to obtain platelet‑poor plasma (PPP)"\n'
-            '   • "centrifuged at room temperature" / "centrifuged at 4°C"\n\n'
+            "Include ONLY if centrifugation conditions are explicitly reported.\n\n"
+            "Required indicators:\n"
+            "• relative centrifugal force (× g)\n"
+            "• rpm values\n"
+            "• duration of centrifugation\n\n"
+            "Mentions of 'plasma was separated' WITHOUT centrifugation parameters "
+            "DO NOT qualify and MUST NOT be flagged.\n\n"
             "4. Storage temperature:\n"
-            "   Core temperature + storage terms:\n"
-            "   • stored at / kept at / maintained at\n"
-            "   • frozen at / immediately frozen / snap frozen\n"
-            "   • refrigerated / kept at 4°C\n"
-            "   • room temperature / ambient temperature / RT\n"
-            "   • long‑term storage / short‑term storage\n"
-            "   • aliquots / aliquoted and stored\n"
-            "   Temperature formats:\n"
-            "   • −80°C / -80°C\n"
-            "   • −70°C / -70°C\n"
-            "   • −20°C / -18°C\n"
-            "   • 4°C / 2–8°C\n"
-            '   • 20–25°C / "room temperature" / "ambient"\n'
-            "   Typical phrases:\n"
-            '   • "plasma samples were aliquoted and stored at −80°C until analysis"\n'
-            '   • "samples were kept at 4°C and analyzed within 4 hours"\n'
-            '   • "serum was stored at −20°C before batch analysis"\n'
-            '   • "samples were kept at room temperature"\n\n'
-            "Common errors to avoid:\n"
-            "• Overcounting: Do NOT flag if only mentioned in Background, Introduction, or as general lab capabilities rather than specimen-specific protocol.\n"
-            "• Do NOT guess based on context or intuition if explicit Methods evidence is lacking; leave null if not reported.\n"
-            "• Ensure the variable is explicitly described for DOAC level measurement specimens, not just general laboratory procedures."
+            "Include ONLY if storage conditions are explicitly stated.\n\n"
+            "Valid indicators include:\n"
+            "• −80°C, −70°C, −20°C\n"
+            "• 4°C or refrigerated storage\n"
+            "• room temperature with explicit wording\n\n"
+            "Silence on storage conditions MUST be interpreted as NOT REPORTED.\n\n"
+            "COMMON ERRORS TO AVOID (STRICTLY PROHIBITED):\n"
+            "• Do NOT infer procedures based on standard laboratory practice\n"
+            "• Do NOT count background or guideline statements\n"
+            "• Do NOT assume missing details\n"
+            "• Do NOT upcode variables based on partial or generic wording\n\n"
+            "FINAL OUTPUT RULE:\n"
+            "Return ONLY the variables that meet ALL criteria above.\n"
+            "If none meet criteria, return null."
         ),
     )
     pre_analytical_variables_sentence_from_text: Optional[List[str]] = Field(
@@ -1209,13 +1192,14 @@ class ExtractionOutcomes(BaseModel):
     Guidelines:
     1) Do not infer or guess.
     2) Use null if unsure.
-    3) Output only facts explicitly in the text.
-    4) If ambiguous, set null (do not guess).
-    5) Numeric values must be exact.
-    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) IGNORE external knowledge.
-    8) Ignore Introduction/Background, References and Acknowledgments content.
-    9) Focus on Methods and Results and Abstract sections.
+    3) Select all applicable.
+    4) Output only facts explicitly in the text.
+    5) If ambiguous, set null (do not guess).
+    6) Numeric values must be exact.
+    7) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    8) IGNORE external knowledge.
+    9) Ignore Introduction/Background, References and Acknowledgments content.
+    10) Focus on Methods and Results and Abstract sections.
     """
 
     # Timing of DOAC Level Measurement Relative to DOAC Intake
@@ -1890,13 +1874,14 @@ class ExtractionDiagnosticPerformance(BaseModel):
     Guidelines:
     1) Do not infer or guess.
     2) Use null if unsure.
-    3) Output only facts explicitly in the PDF.
-    4) If ambiguous, set null (do not guess).
-    5) Numeric values must be exact.
-    6) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
-    7) IGNORE external knowledge.
-    8) Ignore Introduction/Background, References and Acknowledgments content.
-    9) Focus on Methods and Results and Abstract sections.
+    3) Select all applicable.
+    4) Output only facts explicitly in the PDF.
+    5) If ambiguous, set null (do not guess).
+    6) Numeric values must be exact.
+    7) Resolve conflicts by the clearest statement (title→early pages; patients→methods/results).
+    8) IGNORE external knowledge.
+    9) Ignore Introduction/Background, References and Acknowledgments content.
+    10) Focus on Methods and Results and Abstract sections.
     """
 
     # Diagnostic performance metrics for categorical cutoffs
