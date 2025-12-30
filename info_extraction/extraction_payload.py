@@ -49,6 +49,7 @@ class Image(BaseModel):
 class ExtractionMetaDesign(BaseModel):
     """
     Guidelines:
+    0) Be thorough and detailed.
     1) Do not infer or guess.
     2) Use null if unsure.
     3) Select all applicable.
@@ -209,6 +210,7 @@ class ExtractionMetaDesign(BaseModel):
 class ExtractionPopulationIndications(BaseModel):
     """
     Guidelines:
+    0) Be thorough and detailed.
     1) Do not infer or guess.
     2) Use null if unsure.
     3) Select all applicable.
@@ -529,6 +531,7 @@ class ExtractionPopulationIndications(BaseModel):
 class ExtractionMethods(BaseModel):
     """
     Guidelines:
+    0) Be thorough and detailed.
     1) Do not infer or guess.
     2) Use null if unsure.
     3) Select all applicable.
@@ -1147,6 +1150,7 @@ class ExtractionMethods(BaseModel):
 class ExtractionOutcomes(BaseModel):
     """
     Guidelines:
+    0) Be thorough and detailed.
     1) Do not infer or guess.
     2) Use null if unsure.
     3) Select all applicable.
@@ -1829,6 +1833,7 @@ class ExtractionOutcomes(BaseModel):
 class ExtractionDiagnosticPerformance(BaseModel):
     """
     Guidelines:
+    0) Be thorough and detailed.
     1) Do not infer or guess.
     2) Use null if unsure.
     3) Select all applicable.
@@ -1901,45 +1906,67 @@ class ExtractionDiagnosticPerformance(BaseModel):
             Literal[
                 "Spearman correlation coefficient",
                 "Pearson correlation coefficient",
+                "Linear Correlation - Not Specified",
+                "R² (Coefficient of Determination)",
             ]
         ]
     ] = Field(
         default=None,
         alias="Diagnostic Performance Metrics - Continuous Relationships",
         description=(
-            "CRITICAL INCLUSION RULE: Count as Reported ONLY if ALL of the following are true:\n"
-            "1) DOAC levels quantified using a reference method: DOAC-calibrated anti-Xa (ng/mL) OR LC-MS/MS\n"
-            "2) Comparison to at least one comparator assay: PT/aPTT/dTT/TT, LMWH-calibrated anti-Xa (IU/mL), "
-            "viscoelastic testing, or thrombin generation assays\n"
-            "3) Numeric correlation coefficient reported in Results/tables/figures/supplementary results:\n"
-            "   - Pearson or Spearman correlation (r, rho, ρ) between comparator assay values and DOAC concentrations\n"
-            "   - Must be explicitly stated as correlation between comparator and DOAC level (not between two DOAC quantification methods)\n"
-            "4) Results are from the study's own analysis (not just background mentions in Introduction/Discussion)\n\n"
-            "Two-step process:\n"
-            "Step 1 (Evidence): Quote exact sentences from Results/tables/figures that report Pearson or Spearman "
-            "correlation coefficients (with numeric values: r = X, rho = X) comparing comparator assays to DOAC levels "
-            "as continuous variables. Include table/figure numbers and location.\n"
-            "Step 2 (Decision): Based ONLY on those quoted sentences, classify which correlation coefficient was reported.\n\n"
-            "KEY GUARDRAILS:\n"
-            "• Evidence requirement: For every extracted correlation, provide exact supporting quote + location. "
-            "If no quote in Results/tables/figures → Not Reported\n"
-            "• No inference: Do not infer correlation values. Do not fill missing values.\n"
-            "• Section rule: Ignore statements that only appear in Introduction/Discussion as background unless the paper "
-            "also reports the study's own numeric results in Results/tables.\n"
-            "• Comparator vs reference: Only extract if correlation is between comparator assay and DOAC concentration. "
-            "If correlation is only between two DOAC quantification methods (e.g., LC-MS/MS vs DOAC-calibrated anti-Xa), "
-            "that is NOT comparator-assay performance.\n\n"
-            "Comparator assays:\n"
-            "• Coagulation tests: PT/INR, aPTT, dTT, TT\n"
-            "• LMWH/heparin-calibrated anti-Xa (IU/mL) - NOT DOAC-calibrated\n"
-            "• Viscoelastic testing: ROTEM, TEG, ClotPro, etc.\n"
-            "• Thrombin generation assays: TGA, CAT, ETP, etc.\n\n"
-            "IGNORE if:\n"
-            "• Only categorical metrics (sensitivity/specificity) reported (use 'Categorical Cutoffs' field)\n"
-            "• Correlation mentioned qualitatively without numeric coefficient (r/rho value)\n"
-            "• Correlation only between two DOAC quantification methods (not comparator assay performance)\n"
-            "• Only background mentions in Introduction/Discussion without numeric results\n\n"
-            "If the article does not clearly report continuous correlation coefficients, leave null. Do NOT guess."
+            "GOAL:\n"
+            "Identify which continuous numeric relationship metrics are reported between a comparator assay and DOAC concentration "
+            "(measured by a reference method).\n\n"
+            "ABSOLUTE SOURCE RESTRICTION (RESULTS-ONLY):\n"
+            "Evidence may come ONLY from: Results text, Results tables, figures/figure captions, or supplementary Results.\n"
+            "Mentions in Abstract/Introduction/Methods/Discussion do NOT count.\n\n"
+            "GLOBAL INCLUSION (ALL MUST BE TRUE FOR ANY LABEL):\n"
+            "1) DOAC concentration measured by a reference method: DOAC-calibrated anti-Xa (ng/mL or equivalent) OR LC-MS/MS.\n"
+            "2) Comparator assay evaluated vs DOAC concentration (NOT DOAC method-vs-method).\n"
+            "3) Numeric metric reported in allowed Results sources: r/rho/ρ/rs and/or R².\n"
+            "4) Metric is from the study’s own results (not background-only).\n\n"
+            "EVIDENCE DISCIPLINE (MANDATORY, PER LABEL):\n"
+            "- For EACH label you output, you MUST have ≥1 exact supporting quote + location for THAT specific label.\n"
+            "- If no qualifying quotes exist for any label → output null.\n\n"
+            "MUTUAL EXCLUSIVITY (HARD GATE):\n"
+            "The correlation-type labels form a mutually exclusive set:\n"
+            "  S = 'Spearman correlation coefficient'\n"
+            "  P = 'Pearson correlation coefficient'\n"
+            "  L = 'Linear Correlation - Not Specified'\n"
+            "RULE: Output AT MOST ONE of {S, P, L}.\n"
+            "FORBIDDEN COMBINATION (NON-NEGOTIABLE): If you output L, you MUST NOT output S or P.\n\n"
+            "TWO-STAGE PROCEDURE (MANDATORY):\n"
+            "Stage 1 — Evidence Harvest:\n"
+            "  Collect all qualifying quotes from allowed Results sources that include:\n"
+            "  (a) comparator assay term, AND\n"
+            "  (b) a DOAC reference anchor (LC-MS/MS OR ng/mL for DOAC-calibrated anti-Xa), AND\n"
+            "  (c) a numeric metric token: r OR rho/ρ OR rs OR R².\n"
+            "Stage 2 — Label Emission using the decision algorithm below.\n\n"
+            "DECISION ALGORITHM (STRICT, APPLY IN ORDER):\n"
+            "Step B — Choose EXACTLY ONE correlation-type label (or none):\n"
+            "  B1) If ANY qualifying quote explicitly says 'Spearman' OR uses rho/ρ OR rs (as the correlation coefficient) →\n"
+            "      Output ONLY S.\n"
+            "  B2) ELSE IF ANY qualifying quote explicitly says 'Pearson' OR 'Pearson r' →\n"
+            "      Output ONLY P.\n"
+            "  B3) ELSE IF ANY qualifying quote reports a numeric correlation as r (e.g., 'r = 0.72' or 'r=0.72') BUT does NOT name "
+            "      Spearman/Pearson and does NOT use rho/ρ/rs →\n"
+            "      Output ONLY L.\n"
+            "  B4) ELSE output none of {S,P,L}.\n\n"
+            "CONFLICT RESOLUTION (PREVENTS L WITH S/P):\n"
+            "- If there exists ANY Spearman evidence anywhere in the harvested quotes, L is ILLEGAL.\n"
+            "- If there exists ANY Pearson evidence anywhere in the harvested quotes (and no Spearman evidence), L is ILLEGAL.\n"
+            "- L is permitted ONLY when there is correlation evidence (numeric r) AND there is ZERO evidence of Spearman AND ZERO evidence of Pearson.\n\n"
+            "Step C — R² label (INDEPENDENT):\n"
+            "- If ANY qualifying quote explicitly reports R² / R-squared / coefficient of determination → add 'R² (Coefficient of Determination)'.\n"
+            "- R² may co-exist with the single chosen label from {S,P,L}.\n\n"
+            "DISAMBIGUATION RULES:\n"
+            "- Do NOT infer Spearman/Pearson from the presence of R².\n"
+            "- Regression-only outputs (slope/intercept) without r/rho/ρ/rs do not justify S/P/L.\n"
+            "- The word 'correlated' without numeric r/rho/R² does not qualify.\n"
+            "- Ignore analytical validation metrics (LOD/LOQ/interference/precision) unless comparator-vs-DOAC numeric relationship is present.\n\n"
+            "OUTPUT:\n"
+            "Return only the labels supported by qualifying quotes and the rules above; otherwise null.\n"
+            "Never output more than one of {S,P,L}. If L is present, S and P must be absent.\n"
         ),
     )
     diagnostic_performance_continuous_sentence_from_text: Optional[List[str]] = Field(
@@ -1965,43 +1992,67 @@ class ExtractionDiagnosticPerformance(BaseModel):
         default=None,
         alias="Comparator Assays",
         description=(
-            "CRITICAL INCLUSION RULE: Only populate if the study reports diagnostic performance metrics comparing "
-            "comparator assays to DOAC level measurement. This includes BOTH categorical cutoffs (sensitivity, specificity, "
-            "PPV, NPV) AND continuous relationships (Spearman/Pearson correlation coefficients).\n\n"
-            "Operational definition: Count an article as including this parameter if at least one comparator assay has, "
-            "in Results/tables/figures:\n"
-            "• (Binary) sens/spec/PPV/NPV (or extractable 2×2 table), tied to a DOAC concentration cutoff; AND/OR\n"
-            "• (Continuous) Pearson/Spearman correlation between comparator values and DOAC concentration\n\n"
-            "Two-step process:\n"
-            "Step 1 (Evidence): Quote exact sentences from Results/tables/figures that identify which comparator assays "
-            "were evaluated with numeric diagnostic performance results. Look for:\n"
-            "  - Categorical: 'sensitivity of PT >1.2× normal for detecting DOAC level ≥30 ng/mL was 85%', "
-            "'Table 2 shows specificity of aPTT >40s for detecting DOAC level ≥50 ng/mL'\n"
-            "  - Continuous: 'Spearman correlation between PT and rivaroxaban level was 0.65', "
-            "'Pearson correlation coefficient for aPTT vs apixaban concentration was 0.72 (Table 3)'\n"
-            "Step 2 (Decision): Based ONLY on those quoted sentences, classify which comparator assays were used.\n\n"
-            "Include a comparator assay ONLY if:\n"
-            "1) DOAC levels quantified using reference method (DOAC-calibrated anti-Xa ng/mL OR LC-MS/MS)\n"
-            "2) Comparator assay explicitly identified in Results/tables/figures as evaluated for diagnostic performance\n"
-            "3) Numeric diagnostic performance metrics reported for that comparator:\n"
-            "   - Categorical: sensitivity, specificity, PPV, or NPV (with numeric values) for categorical cutoffs\n"
-            "   - Continuous: Spearman or Pearson correlation coefficient (with numeric r/rho value)\n"
-            "4) Results are from the study's own analysis in Results/tables/figures (not background only)\n\n"
-            "Comparator assay categories:\n"
-            "• 'Coagulation testing - Prothrombin time (PT)' = PT/INR/PTr used as comparator\n"
-            "• 'Coagulation testing - Activated partial thromboplastin time (aPTT)' = aPTT/APTT used as comparator\n"
-            "• 'Coagulation testing - Dilute thrombin time (dTT)' = dTT/Hemoclot used as comparator (for dabigatran)\n"
-            "• 'Coagulation testing - Thrombin Time (TT)' = TT used as comparator (for dabigatran)\n"
-            "• 'Anti-Xa assays with LMWH calibrators (IU/mL)' = LMWH/heparin-calibrated anti-Xa (IU/mL) used as comparator "
-            "(NOT DOAC-calibrated anti-Xa in ng/mL)\n"
-            "• 'Viscoelastic testing' = ROTEM/TEG/ClotPro/viscoelastic testing used as comparator\n"
-            "• 'Thrombin generation assays' = TGA/CAT/ETP/thrombin generation used as comparator\n\n"
-            "IGNORE if:\n"
-            "• Comparator assays mentioned but no numeric diagnostic performance metrics reported\n"
-            "• Comparison is for assay validation (e.g., LC-MS vs calibrated anti-Xa) without comparator assay performance\n"
-            "• Only qualitative statements about correlation exist without numeric metrics (r/rho values)\n"
-            "• Only background mentions in Introduction/Discussion without numeric results in Results/tables\n\n"
-            "If the article does not clearly identify which comparator assays were used for diagnostic performance evaluation, leave null. Do NOT guess."
+            "GOAL:\n"
+            "Identify which comparator assay categories were evaluated AGAINST DOAC concentration measured by a reference method, "
+            "using the study’s OWN numeric results.\n\n"
+            "ABSOLUTE SOURCE RESTRICTION (RESULTS-ONLY):\n"
+            "You may use evidence ONLY from: Results section, Results tables, figure captions/figures, or supplementary Results.\n"
+            "Mentions in Abstract/Introduction/Methods/Discussion do NOT count as evidence.\n\n"
+            "TWO-STAGE, QUOTE-FIRST PROCEDURE (MANDATORY):\n"
+            "Stage 1 (Evidence Harvest):\n"
+            "  - Produce ≥1 EXACT verbatim quote per selected category.\n"
+            "  - Each quote MUST be from an allowed Results source and MUST satisfy E1–E3.\n"
+            "Stage 2 (Category Selection):\n"
+            "  - Select a category ONLY if Stage 1 produced a qualifying quote for it.\n"
+            "If Stage 1 yields zero qualifying quotes for all categories → output null.\n\n"
+            "GLOBAL HARD GATE (E1–E3 MUST ALL HOLD IN THE SAME QUOTE):\n"
+            "E1) The quote explicitly names the assay (or platform).\n"
+            "E2) The quote contains at least one qualifying numeric relationship/performance metric:\n"
+            "    - Continuous: r, rho/ρ, rs, or R²\n"
+            "    - Categorical: sensitivity/specificity/PPV/NPV, OR a 2×2 table with counts enabling them\n"
+            "E3) The quote explicitly ties that numeric metric to DOAC concentration measured by a reference method.\n"
+            "    Reference method must be explicitly stated as either:\n"
+            "    - LC-MS/MS, OR\n"
+            "    - DOAC-calibrated anti-Xa reported in ng/mL (or equivalent)\n"
+            "If any of E1–E3 is missing → the category is FORBIDDEN.\n\n"
+            "REFERENCE METHOD CLARIFICATION (IMPORTANT):\n"
+            "- DOAC-calibrated anti-Xa in ng/mL is a reference method.\n"
+            "- LMWH/heparin-calibrated anti-Xa in IU/mL or U/mL is a comparator assay.\n"
+            "- Do NOT count comparisons between two reference methods (e.g., LC-MS/MS vs DOAC-calibrated anti-Xa).\n\n"
+            "STRICT CATEGORY MAPPING (ONLY if explicitly named in the qualifying quote):\n"
+            "• PT: 'prothrombin time', PT, INR, PTr.\n"
+            "• aPTT: 'activated partial thromboplastin time', aPTT/APTT/PTT.\n"
+            "• dTT: 'dilute thrombin time', dTT, 'diluted thrombin time', Hemoclot.\n"
+            "• TT: 'thrombin time', TT (exclude dilute/dTT/Hemoclot).\n"
+            "• Anti-Xa assays with LMWH calibrators (IU/mL): LMWH- or heparin-calibrated anti-Xa/anti-FXa reported as IU/mL or U/mL.\n"
+            "  Do NOT treat DOAC-calibrated anti-Xa in ng/mL as a comparator.\n\n"
+            "HALLUCINATION FIREWALLS (NEGATIVE RULES):\n"
+            "- Generic phrases like 'coagulation assays', 'global coagulation tests', 'whole-blood testing', 'point-of-care', "
+            "or 'viscoelastic' WITHOUT platform+numeric+reference-link evidence DO NOT qualify for any category.\n"
+            "- Do NOT infer a category because it is commonly used in the field.\n"
+            "- Absence of qualifying Results evidence overrides any mentions elsewhere.\n\n"
+            "SPECIAL HARD GATE — VISCOELASTIC TESTING (VETO-STYLE):\n"
+            "Viscoelastic testing is allowed ONLY if ONE single quote (same quote) satisfies V1–V4:\n"
+            "V1) Names a specific platform: ROTEM, TEG, ClotPro, Sonoclot, Quantra, ReoRox.\n"
+            "V2) Names a platform metric (e.g., CT, R time, K time, MCF, MA, amplitude) OR provides r/rho/R²/%/2×2 counts.\n"
+            "V3) Explicitly states the metric is evaluated versus DOAC concentration measured by a reference method "
+            "(must include 'LC-MS/MS' OR 'ng/mL' OR explicit 'DOAC concentration/level').\n"
+            "V4) Quote is from Results/tables/figures/supplementary Results.\n"
+            "If any of V1–V4 fails → DO NOT select 'Viscoelastic testing'.\n\n"
+            "SPECIAL HARD GATE — THROMBIN GENERATION (TGA):\n"
+            "Select 'Thrombin generation assays' ONLY if ONE single quote (same quote):\n"
+            "- explicitly names thrombin generation (thrombin generation, TGA, CAT, ETP), AND\n"
+            "- includes a qualifying numeric metric (r/rho/R²/%/2×2 counts), AND\n"
+            "- explicitly links it to DOAC concentration by a reference method (LC-MS/MS or DOAC-calibrated anti-Xa ng/mL), AND\n"
+            "- is from Results/tables/figures/supplementary Results.\n\n"
+            "EXCLUSIONS (DO NOT COUNT AS DIAGNOSTIC PERFORMANCE):\n"
+            "- Analytical validation only: LOD/LOQ, interference, precision, linearity, recovery.\n"
+            "- Method-vs-method DOAC quantification (LC-MS/MS vs DOAC-calibrated anti-Xa) without a comparator assay.\n"
+            "- Any evidence located only outside allowed Results sources.\n\n"
+            "OUTPUT RULE (NULL BIAS):\n"
+            "Return ONLY categories that have ≥1 qualifying quote meeting E1–E3 (and special gates where applicable).\n"
+            "If none qualify → return null.\n"
+            "Do not guess. Do not infer. Evidence must be explicit.\n"
         ),
     )
     comparator_assays_sentence_from_text: Optional[List[str]] = Field(
