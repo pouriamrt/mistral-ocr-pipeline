@@ -1,272 +1,220 @@
 
-# 🧠 Mistral OCR Annotation Pipeline
-[![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/) 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#-license) 
-[![Build](https://img.shields.io/badge/status-async%20pipeline-success)](#-quickstart)
+# Mistral OCR Annotation Pipeline
 
-A **high‑throughput, asynchronous** pipeline for **OCR-driven extraction, annotation, and markdown generation** from scientific PDFs using **Mistral OCR**.  
-Outputs include **annotated Markdown** files and an **aggregated CSV/Parquet** of structured fields defined by a robust **Pydantic schema**.
+[![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#license)
+[![Tests](https://img.shields.io/badge/tests-59%20passing-brightgreen)](#testing)
 
----
+A **high-throughput, asynchronous** pipeline for **OCR-driven structured data extraction** from scientific PDFs using **Mistral OCR**. Built for biomedical literature — extracts study design, patient populations, methods, clinical outcomes, and diagnostic performance metrics into **CSV/Parquet** tables.
 
-## ✨ Highlights
-- ⚡ **Asynchronous batching** of PDFs with configurable concurrency and rate limiting
-- 🧩 **Schema-driven extraction** via `ExtractionPayload` (Pydantic) with multiple extraction classes
-- ✂️ **PDF pre-processing** to strip unwanted sections (intro, background, acknowledgments, references) before OCR
-- 📝 **Markdown reports** with optional image annotations (base64 inlined)
-- 📊 **Aggregated outputs** in CSV and Parquet for downstream analysis
-- 🛡️ **Graceful error handling** with per-chunk resilience and retry logic
-- 🔍 **Post-processing validation** with LLM-based field verification
-- 📝 **Logging** to `logs/pipeline.log` with `loguru` and rich console output
-- 🔄 **Resume capability** to skip already-processed PDFs
+## Pipeline Architecture
 
----
+<p align="center">
+  <img src="artifacts/pipeline_architecture.png" alt="Pipeline Architecture" width="700"/>
+</p>
 
-## 🗂️ Project Structure
-> The repository ships with a modular, package-based layout. At runtime the pipeline creates output folders.
+## Extraction Schemas
 
-```
-.
-├─ info_extraction/             # Core extraction package
-│  ├─ __init__.py
-│  ├─ extraction_payload.py    # Pydantic schema capturing all target fields
-│  ├─ get_annotations.py        # Mistral OCR client + async wrapper with rate limiting
-│  └─ to_markdown.py            # Transforms OCR response to Markdown with image annotations
-├─ utils/                       # Utility functions package
-│  ├─ __init__.py
-│  ├─ utils.py                  # Async I/O utilities: base64 encode, page count, dict merging
-│  └─ diagram.py                # Flow diagram generation for pipeline visualization
-├─ pre_processing/              # PDF pre-processing package
-│  ├─ __init__.py
-│  ├─ main.py                   # Entry point for PDF section stripping
-│  └─ pdf_section_stripper/     # PDF section removal utilities
-│     ├─ __init__.py
-│     ├─ config.py              # Configuration for section stripping behavior
-│     ├─ models.py              # Data models for sections and cuts
-│     ├─ outline_detector.py    # Detects sections from PDF outline/bookmarks
-│     ├─ heading_detector.py    # Detects section headings via layout analysis
-│     ├─ planner.py             # Builds page removal plan from detected sections
-│     ├─ pipeline.py            # Main PDFSectionStripper class
-│     └─ writer.py              # Writes stripped PDFs to disk
-├─ post_processing/             # Post-processing and validation package
-│  ├─ __init__.py
-│  ├─ post_processing.py        # LLM-based field validation and quality checks
-│  └─ unstack_payloads.py       # Field configuration and payload unstacking utilities
-├─ main.py                      # Orchestrates concurrency, aggregation, and persistence
-├─ pyproject.toml               # Project metadata / dependencies (for uv/pip)
-├─ uv.lock                      # (uv) resolved dependency lock
-├─ .env.example                 # Example environment variables (copy to .env)
-├─ papers/                      # (create) input PDFs directory
-│  ├─ todo/                     # Place PDFs here for processing
-│  │  └─ your_paper_1.pdf
-│  │  └─ your_paper_2.pdf
-│  └─ todo_stripped/            # (auto-created) pre-processed PDFs with sections removed
-├─ output/                      # (auto-created) per-chunk Markdown exports
-│  ├─ <paper_stem>_0.md
-│  ├─ <paper_stem>_1.md
-│  └─ aggregated/               # (auto-created) final tabular outputs
-│     ├─ df_annotations.csv
-│     └─ df_annotations.parquet
-├─ logs/                        # (auto-created) logs
-│  ├─ pipeline.log              # Main pipeline execution logs
-│  └─ pre_processing.log        # Pre-processing step logs
-├─ data/                        # (optional) Additional data files for analysis
-└─ README.md
-```
+The pipeline runs **5 Pydantic schemas in parallel** per PDF chunk, each targeting a different clinical domain. Results are deep-merged into a single row per paper.
+
+<p align="center">
+  <img src="artifacts/extraction_schemas.png" alt="Extraction Schemas" width="900"/>
+</p>
+
+Each of the 60+ fields includes a paired `_sentence_from_text` field for traceability. Adding a new field to any schema automatically propagates to CSV/Parquet output columns.
 
 ---
 
-## 🧩 Data Model (ExtractionPayload)
-The pipeline extracts a rich set of biomedical/experimental fields (journal, design, cohorts, assay methods, timing, thresholds, outcomes, etc.) encoded in `extraction_payload.py`.  
-Use these fields directly in analytics or dashboards (e.g., study design distribution, assay performance summaries).
+## Highlights
 
-> **Tip:** You can extend the schema at any time—new fields flow through to CSV/Parquet automatically.
+- **Async batching** with configurable concurrency and rate limiting
+- **Schema-driven extraction** — 5 Pydantic V2 models (60+ fields) define both the Mistral API contract and output columns
+- **PDF pre-processing** — strip intro, background, acknowledgments, and references before OCR
+- **Chunking + deep merge** — large PDFs split into 8-page chunks, results merged with list dedup and nested dict recursion
+- **Resume mode** — SHA256-tracked; skip already-processed PDFs
+- **Failure tracking** — failed PDFs logged to `failures.jsonl`
+- **Retry with backoff** — retries on 429, 500, 502, 503, 504, and timeout errors (5 attempts, exponential backoff)
+- **Post-processing validation** — LLM-based field verification via LangChain + GPT
+- **Incremental I/O** — rows append to CSV/Parquet one at a time (no in-memory accumulation)
+- **Markdown reports** with optional base64-inlined image annotations
 
 ---
 
-## ⚙️ Setup
+## Setup
 
-### 1) Clone
+### 1. Clone
+
 ```bash
-git clone https://github.com/yourname/mistral-ocr-pipeline.git
+git clone https://github.com/pouriamrt/mistral-ocr-pipeline.git
 cd mistral-ocr-pipeline
 ```
 
-### 2) Python & Dependencies
+### 2. Install Dependencies
+
 **Requires Python 3.13+**
 
-Using `uv` (recommended):
 ```bash
-uv sync
-```
+# Recommended (includes dev tools)
+uv sync --all-groups
 
-Or using `pip`:
-```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+# Or just runtime deps
+uv sync
+
+# Or using pip
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-**Key dependencies:**
-- `mistralai` - Mistral OCR API client
-- `pydantic` - Schema validation
-- `aiofiles` - Async file I/O
-- `pypdf` - PDF metadata extraction
-- `pymupdf` (fitz) - PDF manipulation and section stripping
-- `rapidfuzz` - Fuzzy string matching for heading detection
-- `pandas` / `pyarrow` - Data aggregation
-- `langchain` / `langchain-openai` - Post-processing validation
-- `loguru` - Structured logging
-- `tenacity` - Retry logic with exponential backoff
-- `winloop` / `uvloop` - High-performance async event loop
-- `rich` / `tqdm` - Progress bars and enhanced console output
+### 3. Environment
 
-### 3) Environment
-Create a `.env` from the example and add your key:
-```bash
-cp .env.example .env
-# then edit .env
-MISTRAL_API_KEY=your_api_key_here
-MAX_CONCURRENCY=3
-IMAGE_ANNOTATION=False
-OVERWRITE_MD=True
-MODEL_JUDGE=gpt-5-mini  # For post-processing validation (optional)
-```
+Create a `.env` file with your API keys:
 
-### 4) Input PDFs
-Place files in `./papers/todo/`. The pipeline will scan `*.pdf` automatically.
-
-### 5) Pre-processing (Optional)
-Before running the main pipeline, you may want to strip unwanted sections (intro, background, acknowledgments, references) from PDFs to reduce processing time and focus on core content:
-
-```bash
-python pre_processing/main.py
-```
-
-This will:
-- Read PDFs from `papers/todo/`
-- Detect section boundaries using outline detection and heading analysis
-- Remove configured sections (customizable via `StripConfig` in `pre_processing/main.py`)
-- Output cleaned PDFs to `papers/todo_stripped/`
-
-You can then process the stripped PDFs by updating the input path in `main.py` or manually moving them.
-
----
-
-## 🚀 Quickstart
-```bash
-python main.py
-```
-
-**What you’ll get**
-- `output/<paper>_*.md` — readable per-chunk Markdown (includes document annotation and inlined images if enabled)
-- `output/aggregated/df_annotations.csv` — one row per processed PDF with structured fields
-- `output/aggregated/df_annotations.parquet` — fast, columnar equivalent (if `pyarrow` is installed)
-
----
-
-## 🧠 How It Works
-1. **Pre-processing** (optional) — `pre_processing/pdf_section_stripper` removes unwanted sections (intro, background, acknowledgments, references) using outline detection and heading analysis via PyMuPDF.
-2. **Load & Encode** — `utils.utils.encode_pdf` base64-encodes PDFs asynchronously.  
-3. **OCR + Annotation** — `info_extraction.get_annotations` calls Mistral OCR with rate limiting and retry logic, using **document annotation format** mapped to `ExtractionPayload` classes.  
-4. **Chunking** — Large PDFs are processed in **MAX_PAGES_PER_REQ** chunks with **async concurrency** and semaphore-based rate limiting.  
-5. **Markdown** — `info_extraction.to_markdown` builds consolidated Markdown with (optional) image annotations.  
-6. **Aggregation** — Partial rows from chunks are **deduped/merged** using `merge_multiple_dicts_async` and written to CSV/Parquet.  
-7. **Post-processing** (optional) — `post_processing.post_processing` provides LLM-based validation of extracted fields.
-
-**Ascii flow:**  
-```
-PDFs -> [Pre-processing: strip sections] -> base64 -> Mistral OCR (rate-limited) -> JSON (ExtractionPayload) -> Markdown + Tabular -> CSV/Parquet
-                                                                                                                              ↓
-                                                                                                                    Post-processing (validation)
-```
-
----
-
-## 🔧 Configuration
-Tune behavior via `.env`:
 ```ini
-MISTRAL_API_KEY=...     # required
-MAX_CONCURRENCY=3       # concurrent OCR calls
-IMAGE_ANNOTATION=False  # enable base64 image inlining in markdown
-OVERWRITE_MD=True       # overwrite existing markdown files
-MODEL_JUDGE=gpt-5-mini  # LLM model for post-processing validation
+MISTRAL_API_KEY=your_api_key_here
+MAX_CONCURRENCY=3           # concurrent OCR tasks
+IMAGE_ANNOTATION=False      # base64 inline images in markdown
+OVERWRITE_MD=True           # reprocess all PDFs (False = resume mode)
+OCR_RPS=5                   # OCR requests per second rate limit
+MODEL_JUDGE=gpt-4o-mini     # LLM for post-processing validation (optional)
+INPUT_DIR=papers/todo       # PDF input directory
 ```
 
-Edit constants in `main.py` for chunk sizing:
-```python
-MAX_PAGES_PER_REQ = 8  # pages per OCR request
-```
+### 4. Input PDFs
 
-The pipeline uses `winloop` (Windows) or `uvloop` (Unix) for high-performance async I/O.
+Place PDF files in `./papers/todo/`. The pipeline scans `*.pdf` automatically.
 
 ---
 
-## 📘 Usage Notes
-- **Pre-processing step**: Run `python pre_processing/main.py` first to strip unwanted sections and reduce processing time. Configure which sections to remove in `pre_processing/main.py` via `StripConfig`.
-- For **very long PDFs**, results are merged across chunks using `merge_multiple_dicts_async`.  
-- To **enable image annotations**, set `IMAGE_ANNOTATION=True` in `.env` or pass `image_annotation=True` to the processing function.  
-- Parquet output requires `pyarrow` (included in dependencies).  
-- The pipeline supports **resume mode**: if `OVERWRITE_MD=False`, already-processed PDFs (tracked by SHA1 hash) are skipped.  
-- Rate limiting is built into the OCR client to respect API limits (configurable via `OCR_RPS`).
-- Input PDFs should be placed in `papers/todo/` directory (not directly in `papers/`).
+## Quickstart
 
----
-
-## 🧪 Testing Locally
 ```bash
-# Dry-run with a single sample
-python -c "from pathlib import Path; print(list(Path('papers/todo').glob('*.pdf'))[:1])"
-
-# Optional: Pre-process PDFs to strip sections
+# Optional: strip unwanted sections first
 python pre_processing/main.py
 
-# Run main pipeline
+# Run the main extraction pipeline
 python main.py
 ```
 
----
+**Output:**
 
-## 🛠️ Troubleshooting
-- **`MISTRAL_API_KEY is not set`** → Ensure `.env` is present and loaded, or export variable in shell.  
-- **Parquet save failed** → Install `pyarrow`: `pip install pyarrow`.  
-- **No PDFs found** → Confirm files exist in `./papers/todo/` and match `*.pdf`.  
-- **Rate limits / timeouts** → Lower `MAX_CONCURRENCY` or `MAX_PAGES_PER_REQ`.
-- **Pre-processing not detecting sections** → Adjust `min_heading_score` in `StripConfig` or check PDF outline/bookmarks. Enable `debug=True` for detailed logging.
-
----
-
-## 🗺️ Roadmap
-
-We’re continuously evolving to make your experience better! Here are some highlights:
-
-- ✅ Reliable: Automatic retry & backoff for transient OCR errors using `tenacity`
-- ✅ Smooth operation: Built-in rate limiting for safe and efficient OCR API usage
-- ✅ Robust: Effortless resume for already-processed PDFs—no lost progress
-- ✅ Quality assurance: Integrated LLM-powered post-processing validation
-
-**Coming soon to make your workflow even more seamless:**
-- 🚀 Flexible CLI flags (customize input/output directories, select page ranges)
-- 🌈 Beautiful rich HTML reports with embedded assets
-- 📊 Enhanced batch processing with intuitive progress bars
-
-Have feedback or ideas? We’d love to hear from you as we continue to build!
+| Path | Description |
+|------|-------------|
+| `output/<paper>_*.md` | Per-chunk Markdown with annotations |
+| `output/aggregated/df_annotations.csv` | One row per PDF, 60+ structured fields |
+| `output/aggregated/df_annotations.parquet` | Same data, columnar format |
+| `output/aggregated/failures.jsonl` | Failed PDFs with timestamps |
 
 ---
 
-## 🙌 Acknowledgments
-- **Mistral AI** — OCR + annotation interfaces  
-- **Pydantic** — robust schema modeling  
-- **pandas / pyarrow** — analytics-ready outputs  
-- **pypdf** — fast PDF metadata access
-- **PyMuPDF (fitz)** — PDF manipulation and section detection
-- **rapidfuzz** — fuzzy string matching for heading detection
-- **loguru** — structured logging
-- **langchain** — LLM integration for post-processing
-- **winloop / uvloop** — high-performance async event loops
-- **tenacity** — retry logic with exponential backoff
-- **rich / tqdm** — enhanced progress bars and console output
+## How It Works
+
+### Pre-processing (optional)
+
+`python pre_processing/main.py` strips unwanted sections before OCR:
+
+- **Dual detection**: outline/bookmarks + fuzzy heading matching (rapidfuzz)
+- Configurable via `StripConfig` — choose which sections to remove
+- Outputs cleaned PDFs to `papers/todo_stripped/`
+
+### Main Pipeline
+
+1. **Encode** — base64-encode PDFs asynchronously via `aiofiles`
+2. **Page count** — detect reference section boundary, only process up to it
+3. **Chunk** — split into 8-page chunks for API limits
+4. **OCR** — for each chunk, run all 5 extraction schemas in parallel via Mistral OCR (rate-limited, with retry)
+5. **Merge** — deep-merge chunk results (dedup lists, recurse nested dicts)
+6. **Write** — incrementally append to CSV and Parquet; write per-chunk Markdown
+
+### Post-processing (optional)
+
+```bash
+python post_processing/post_processing.py
+```
+
+LLM-based validation using LangChain + GPT. For each extracted value, checks whether the supporting sentence actually backs the claim. Removes unsupported values.
 
 ---
 
-## 🪪 License
-MIT © 2025 Pouria Mortezaagha
+## Project Structure
+
+```
+.
+├── info_extraction/
+│   ├── schemas/                  # Pydantic extraction models (one per file)
+│   │   ├── __init__.py           # EXTRACTION_SCHEMAS registry, df_cols helpers
+│   │   ├── _common.py            # ImageType, Image (shared types)
+│   │   ├── meta_design.py        # Bibliography & Study Design
+│   │   ├── population.py         # Population, Indications, Subgroups
+│   │   ├── methods.py            # Methods & Assays
+│   │   ├── outcomes.py           # Clinical Outcomes
+│   │   └── diagnostic.py         # Diagnostic Performance Metrics
+│   ├── extraction_payload.py     # Backward-compatible re-export
+│   ├── get_annotations.py        # Mistral OCR client, rate limiter, retry
+│   └── to_markdown.py            # OCR response → Markdown
+├── utils/
+│   └── utils.py                  # PDF I/O, dict merging, CSV/Parquet writers
+├── pre_processing/
+│   ├── main.py                   # Entry point for section stripping
+│   └── pdf_section_stripper/     # Outline/heading detection, planning, writing
+├── post_processing/
+│   ├── post_processing.py        # LLM-based field validation
+│   └── unstack_payloads.py       # Field config builder from schemas
+├── tests/                        # pytest test suite (59 tests)
+│   ├── test_merge.py             # Dict merging logic
+│   ├── test_resume_index.py      # CSV index, hashing, drop_empty_rows
+│   └── test_extraction_models.py # Pydantic model parsing & invariants
+├── main.py                       # Pipeline orchestrator
+├── pyproject.toml                # Dependencies (core / dev / notebooks)
+└── artifacts/                    # Architecture diagrams
+```
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MISTRAL_API_KEY` | *required* | Mistral API key |
+| `MAX_CONCURRENCY` | `3` | Concurrent OCR tasks |
+| `OCR_RPS` | `5` | OCR requests per second |
+| `IMAGE_ANNOTATION` | `False` | Base64 inline images in markdown |
+| `OVERWRITE_MD` | `True` | Reprocess all PDFs (`False` = resume mode) |
+| `MODEL_JUDGE` | `gpt-4o-mini` | LLM model for post-processing |
+| `INPUT_DIR` | `papers/todo` | PDF input directory |
+| `MAX_PAGES_PER_REQ` | `8` | Pages per OCR chunk (hardcoded in `main.py`) |
+
+---
+
+## Testing
+
+```bash
+# Run full test suite
+python -m pytest tests/ -v
+
+# Run specific test file
+python -m pytest tests/test_merge.py -v
+```
+
+59 tests covering:
+- **Merge logic** — dedup, nested dicts, empty/None handling, whitespace normalization
+- **Resume index** — SHA256 hashing, CSV index loading, drop_empty_rows edge cases
+- **Extraction models** — all 5 schemas parse, alias round-trips, paired-field invariants
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `MISTRAL_API_KEY is not set` | Ensure `.env` exists and contains the key |
+| No PDFs found | Check files exist in `papers/todo/` matching `*.pdf` |
+| Rate limits / timeouts | Lower `MAX_CONCURRENCY` or `OCR_RPS` in `.env` |
+| Pre-processing not detecting sections | Adjust `min_heading_score` in `StripConfig`, enable `debug=True` |
+| Post-processing fails | Ensure `OPENAI_API_KEY` is set in `.env` |
+| Check which PDFs failed | Inspect `output/aggregated/failures.jsonl` |
+
+---
+
+## License
+
+MIT &copy; 2025 Pouria Mortezaagha
