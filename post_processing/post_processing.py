@@ -1,25 +1,30 @@
-from typing import List, Any, Optional
+from typing import Any, Optional
 
 import json
 import os
 from math import ceil
-import ast
 
 import pandas as pd
 from tqdm import tqdm
 from dotenv import load_dotenv
+from loguru import logger
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
 
-from unstack_payloads import get_all_field_configs, FieldValidationConfig
+from post_processing.unstack_payloads import (
+    get_all_field_configs,
+    FieldValidationConfig,
+)
 
 
 load_dotenv(override=True)
 
-MODEL = os.getenv("MODEL_JUDGE", "gpt-5-mini")
+MODEL = os.getenv("MODEL_JUDGE", "gpt-4o-mini")
+
+_MAX_LITERAL_LEN = 10_000
 
 # ------------------------------
 # Config for which fields to check
@@ -39,6 +44,10 @@ def make_validator_chain(model: Optional[Runnable] = None) -> Runnable:
     returns JSON with booleans indicating whether each value is supported by the sentence.
     """
     if model is None:
+        if not os.getenv("OPENAI_API_KEY"):
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set — required for post-processing validation"
+            )
         model = ChatOpenAI(
             model=MODEL,
             temperature=0.0,
@@ -93,10 +102,24 @@ def make_validator_chain(model: Optional[Runnable] = None) -> Runnable:
 # ------------------------------
 
 
-def _normalize_scalar_or_list(v: Any, expect_list: bool) -> List[Any] | Any:
+def _try_parse_str(v: str) -> Any:
+    """Try to parse a string as JSON. Returns the parsed value or the original string."""
+    if len(v) > _MAX_LITERAL_LEN:
+        return v
+    try:
+        return json.loads(v)
+    except (json.JSONDecodeError, ValueError):
+        # Handle Python-style literals (single quotes) as a fallback
+        try:
+            return json.loads(v.replace("'", '"'))
+        except (json.JSONDecodeError, ValueError):
+            return v
+
+
+def _normalize_scalar_or_list(v: Any, expect_list: bool) -> list[Any] | Any:
     """
     Ensure values and sentences are in compatible shapes.
-    Also handles Python-list-like strings such as "['a', 'b']".
+    Also handles JSON-list-like strings such as '["a", "b"]'.
     """
     if v is None:
         return [] if expect_list else None
@@ -106,12 +129,9 @@ def _normalize_scalar_or_list(v: Any, expect_list: bool) -> List[Any] | Any:
             return v
 
         if isinstance(v, str):
-            try:
-                parsed = ast.literal_eval(v)
-                if isinstance(parsed, list):
-                    return parsed
-            except Exception:
-                pass
+            parsed = _try_parse_str(v)
+            if isinstance(parsed, list):
+                return parsed
 
         return [v]
 
@@ -125,12 +145,9 @@ def _normalize_scalar_or_list(v: Any, expect_list: bool) -> List[Any] | Any:
             return None
 
         if isinstance(v, str):
-            try:
-                parsed = ast.literal_eval(v)
-                if not isinstance(parsed, list):
-                    return parsed
-            except Exception:
-                pass
+            parsed = _try_parse_str(v)
+            if not isinstance(parsed, list):
+                return parsed
 
         return v
 
@@ -192,7 +209,7 @@ def _apply_llm_result_to_row(
 
 def validate_dataframe_with_llm(
     df: pd.DataFrame,
-    field_configs: List[FieldValidationConfig] | None = None,
+    field_configs: list[FieldValidationConfig] | None = None,
     model: Optional[Runnable] = None,
     batch_size: int = 16,
 ) -> pd.DataFrame:
@@ -215,12 +232,12 @@ def validate_dataframe_with_llm(
             if c not in df_validated.columns
         ]
         if missing_cols:
-            print(
-                f"[INFO] Skipping field '{cfg.value_field}' – missing columns: {missing_cols}"
+            logger.info(
+                f"Skipping field '{cfg.value_field}' – missing columns: {missing_cols}"
             )
             continue
 
-        print(f"[INFO] Validating field '{cfg.value_field}' using LLM (batched)...")
+        logger.info(f"Validating field '{cfg.value_field}' using LLM (batched)...")
 
         # Build inputs and metadata for rows that actually need validation
         inputs = []  # list of dicts to feed into chain.batch
@@ -266,7 +283,7 @@ def validate_dataframe_with_llm(
 
         total = len(inputs)
         num_batches = ceil(total / batch_size)
-        all_results: List[Optional[dict]] = []
+        all_results: list[dict | None] = []
 
         for b in tqdm(
             range(num_batches),
@@ -279,8 +296,8 @@ def validate_dataframe_with_llm(
             try:
                 batch_results = chain.batch(batch_inputs)
             except Exception as e:
-                print(
-                    f"[WARN] LLM batch failed for field '{cfg.value_field}' "
+                logger.warning(
+                    f"LLM batch failed for field '{cfg.value_field}' "
                     f"batch {b + 1}/{num_batches}: {e}"
                 )
                 # Fill with None so lengths stay aligned

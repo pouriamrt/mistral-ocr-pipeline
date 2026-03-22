@@ -1,14 +1,8 @@
 from dataclasses import dataclass
-from typing import List, Optional, Type, Dict, Any, get_origin, get_args
+from typing import Any, Union, get_origin, get_args
 from pydantic import BaseModel
 
-from info_extraction.extraction_payload import (
-    ExtractionMetaDesign,
-    ExtractionPopulationIndications,
-    ExtractionMethods,
-    ExtractionOutcomes,
-    ExtractionDiagnosticPerformance,
-)
+from info_extraction.extraction_payload import EXTRACTION_SCHEMAS
 
 
 # -------------------------------------------------
@@ -28,20 +22,16 @@ class FieldValidationConfig:
 # -------------------------------------------------
 def _is_list_type(annotation: Any) -> bool:
     """
-    Determine if a field's annotation is a List[...] (optionally wrapped in Optional).
+    Determine if a field's annotation is a list[...] (optionally wrapped in Optional).
     """
     origin = get_origin(annotation)
 
-    # Optional[...] is represented as Union[..., NoneType]
-    if origin is list or origin is List:
+    if origin is list:
         return True
 
-    if origin is not None:
-        # Handle Optional[List[...]] etc.
-        args = get_args(annotation)
-        for arg in args:
-            if get_origin(arg) in (list, List):
-                return True
+    # Optional[List[...]] is Union[List[...], NoneType]
+    if origin is Union:
+        return any(get_origin(a) is list for a in get_args(annotation))
 
     return False
 
@@ -50,10 +40,10 @@ def _is_list_type(annotation: Any) -> bool:
 # Core builder: from a single Pydantic model
 # -------------------------------------------------
 def build_field_configs_for_model(
-    model: Type[BaseModel],
-    label_overrides: Optional[Dict[str, str]] = None,
+    model: type[BaseModel],
+    label_overrides: dict[str, str] | None = None,
     sentence_suffix: str = "_sentence_from_text",
-) -> List[FieldValidationConfig]:
+) -> list[FieldValidationConfig]:
     """
     Build FieldValidationConfig entries for a Pydantic model.
 
@@ -67,7 +57,7 @@ def build_field_configs_for_model(
     """
     label_overrides = label_overrides or {}
 
-    configs: List[FieldValidationConfig] = []
+    configs: list[FieldValidationConfig] = []
     fields = model.model_fields  # pydantic v2
 
     for name, sentence_field in fields.items():
@@ -110,32 +100,14 @@ def build_field_configs_for_model(
 # -------------------------------------------------
 # Get all field configs
 # -------------------------------------------------
-def get_all_field_configs():
-    return [
-        # 1) Bibliography & Study Design
-        *build_field_configs_for_model(
-            ExtractionMetaDesign,
-        ),
-        # 2) Population, Indications, Subgroups
-        *build_field_configs_for_model(
-            ExtractionPopulationIndications,
-        ),
-        # 3) Methods & Assays
-        *build_field_configs_for_model(
-            ExtractionMethods,
-        ),
-        # 4) Outcomes
-        *build_field_configs_for_model(
-            ExtractionOutcomes,
-        ),
-        # 5) Diagnostic Performance
-        *build_field_configs_for_model(
-            ExtractionDiagnosticPerformance,
-        ),
-    ]
+def get_all_field_configs() -> list[FieldValidationConfig]:
+    configs: list[FieldValidationConfig] = []
+    for schema in EXTRACTION_SCHEMAS:
+        configs.extend(build_field_configs_for_model(schema))
+    return configs
 
 
 if __name__ == "__main__":
-    DEFAULT_FIELD_CONFIGS: List[FieldValidationConfig] = get_all_field_configs()
+    DEFAULT_FIELD_CONFIGS = get_all_field_configs()
 
     print(DEFAULT_FIELD_CONFIGS, len(DEFAULT_FIELD_CONFIGS))

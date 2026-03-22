@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import List, Type, Dict, Any, Tuple
 import json
 import uuid
@@ -13,27 +14,25 @@ from loguru import logger
 
 from info_extraction.extraction_payload import (
     Image,
-    ExtractionMetaDesign,  # class 1
-    ExtractionPopulationIndications,  # class 2
-    ExtractionMethods,  # class 3
-    ExtractionOutcomes,  # class 4
-    ExtractionDiagnosticPerformance,  # class 5
+    EXTRACTION_SCHEMAS,
 )
 
 from utils.utils import merge_multiple_dicts_async
 from time import monotonic
 
-# tokens per second; tune in .env (e.g., OCR_RPS=4 → max 4 requests/sec)
-_OCR_RPS = 5
+_OCR_RPS = float(os.getenv("OCR_RPS", "5"))
 
 
 class _AsyncRateLimiter:
     def __init__(self, rps: float):
         self._interval = 1.0 / max(rps, 1e-6)
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock | None = None
         self._last = 0.0
 
     async def wait(self):
+        # Lazy-init lock inside the running event loop (safe across loop restarts)
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             now = monotonic()
             wait = max(0.0, self._last + self._interval - now)
@@ -46,17 +45,27 @@ _rate_limiter = _AsyncRateLimiter(_OCR_RPS)
 
 
 # ---------------- core OCR call (sync) ----------------
-def _is_rate_limit(e: Exception) -> bool:
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_retryable(e: Exception) -> bool:
     txt = str(e).lower()
     code = getattr(e, "status_code", None)
-    return code == 429 or "rate" in txt or "quota" in txt or "too many requests" in txt
+    if code in _RETRYABLE_STATUS_CODES:
+        return True
+    return (
+        "rate" in txt
+        or "quota" in txt
+        or "too many requests" in txt
+        or "timeout" in txt
+    )
 
 
 @retry(
     reraise=True,
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=4, max=60),
-    retry=retry_if_exception(_is_rate_limit),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=4, max=120),
+    retry=retry_if_exception(_is_retryable),
 )
 def _get_annotation_sync(
     client: Mistral,
@@ -65,7 +74,7 @@ def _get_annotation_sync(
     pages: List[int],
     image_annotation: bool = False,
     model_name: str = "mistral-ocr-latest",
-) -> OCRResponse:
+) -> OCRResponse | None:
     if not pages:
         logger.warning("OCR called with empty pages. Skipping.")
         return None
@@ -91,9 +100,9 @@ def _get_annotation_sync(
     try:
         return client.ocr.process(**kwargs)
     except Exception as e:
-        if _is_rate_limit(e):
+        if _is_retryable(e):
             raise
-        logger.error(f"Error in OCR: {e}")
+        logger.error(f"Non-retryable OCR error: {e}")
         return None
 
 
@@ -107,7 +116,7 @@ async def get_annotation_async(
     pages: List[int],
     image_annotation: bool = False,
     model_name: str = "mistral-ocr-latest",
-) -> OCRResponse:
+) -> OCRResponse | None:
     await _rate_limiter.wait()
     return await asyncio.to_thread(
         _get_annotation_sync,
@@ -134,13 +143,7 @@ async def run_all_payloads(
     Executes OCR with all payload schemas and merges the
     document_annotation JSON objects into one flat dict.
     """
-    payload_classes: List[Type[BaseModel]] = [
-        ExtractionMetaDesign,
-        ExtractionPopulationIndications,
-        ExtractionMethods,
-        ExtractionOutcomes,
-        ExtractionDiagnosticPerformance,
-    ]
+    payload_classes = EXTRACTION_SCHEMAS
 
     tasks = [
         get_annotation_async(
@@ -153,13 +156,14 @@ async def run_all_payloads(
         )
         for cls in payload_classes
     ]
-    responses: List[OCRResponse | None] = await asyncio.gather(
-        *tasks, return_exceptions=False
-    )
+    raw_responses = await asyncio.gather(*tasks, return_exceptions=True)
 
     merged: Dict[str, Any] = {}
     last_resp = None
-    for resp in responses:
+    for resp in raw_responses:
+        if isinstance(resp, BaseException):
+            logger.error(f"OCR schema task failed: {resp}")
+            continue
         if not resp:
             continue
         last_resp = resp

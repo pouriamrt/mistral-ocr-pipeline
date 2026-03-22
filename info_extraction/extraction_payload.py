@@ -12,15 +12,9 @@ def df_cols_from_model(model_cls: Type[BaseModel], use_alias: bool = True) -> Li
 
 
 def df_cols_from_models(use_alias: bool = True) -> List[str]:
-    models = [
-        ExtractionMetaDesign,
-        ExtractionPopulationIndications,
-        ExtractionMethods,
-        ExtractionOutcomes,
-        ExtractionDiagnosticPerformance,
-    ]
+    # Uses EXTRACTION_SCHEMAS defined at the bottom of this file (forward ref resolved at call time)
     seen, out = set(), []
-    for cls in models:
+    for cls in EXTRACTION_SCHEMAS:
         for col in df_cols_from_model(cls, use_alias=use_alias):
             if col not in seen:
                 seen.add(col)
@@ -2119,3 +2113,13 @@ class ExtractionDiagnosticPerformance(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+# ── Single source of truth for all extraction schemas ──
+EXTRACTION_SCHEMAS: List[Type[BaseModel]] = [
+    ExtractionMetaDesign,
+    ExtractionPopulationIndications,
+    ExtractionMethods,
+    ExtractionOutcomes,
+    ExtractionDiagnosticPerformance,
+]

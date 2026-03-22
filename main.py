@@ -1,4 +1,6 @@
 import os
+import re
+import json
 import asyncio
 from time import time
 from pathlib import Path
@@ -23,7 +25,7 @@ from utils.utils import (
     ParquetAppender,
 )
 
-install(show_locals=True)
+install(show_locals=False)
 load_dotenv(override=True)
 
 INPUT_DIR = Path(os.getenv("INPUT_DIR", "papers/todo"))
@@ -90,11 +92,11 @@ async def process_one_pdf_chunk(
             row = None
 
         # 3) Write markdown to file
+        safe_stem = re.sub(r"[^\w\-]", "_", pdf_path.stem)
         out_md = (
-            OUTPUT_DIR
-            / f"{pdf_path.stem}_{int(min(pages_chunk) / MAX_PAGES_PER_REQ)}.md"
+            OUTPUT_DIR / f"{safe_stem}_{int(min(pages_chunk) / MAX_PAGES_PER_REQ)}.md"
         )
-        if not Path(out_md).exists() or OVERWRITE_MD:
+        if ocr_response is not None and (not Path(out_md).exists() or OVERWRITE_MD):
             try:
                 await asyncio.to_thread(
                     convert_to_markdown, document_annotations, ocr_response, str(out_md)
@@ -125,6 +127,8 @@ async def process_one_pdf(
         result = await process_one_pdf_chunk(
             pdf_path, base64_pdf, client, sem, list(range(pages)), image_annotation
         )
+        if result is None:
+            return None
         result = {k: v for k, v in result.items() if k != "__chunk_start__"}
         result["__source_file__"] = str(file_name_sha1(pdf_path.name))
         return result
@@ -211,21 +215,26 @@ async def amain():
 
             sem = asyncio.Semaphore(MAX_CONCURRENCY)
             start_time = time()
+            failures_path = FINAL_OUTPUT_DIR / "failures.jsonl"
 
-            # launch all tasks
-            tasks = [
-                process_one_pdf(p, client, sem, image_annotation=IMAGE_ANNOTATION)
-                for p in todo
-            ]
+            # launch all tasks paired with their PDF path
+            async def _run(p: Path) -> tuple[Path, dict | None]:
+                result = await process_one_pdf(
+                    p, client, sem, image_annotation=IMAGE_ANNOTATION
+                )
+                return p, result
+
+            tasks = [_run(p) for p in todo]
 
             row_count = 0
+            fail_count = 0
             with ParquetAppender(parquet_path) as pw:
                 for fut in tqdm(
                     asyncio.as_completed(tasks),
                     total=len(tasks),
                     desc="Processing PDFs",
                 ):
-                    result = await fut
+                    pdf_path, result = await fut
                     if result is not None:
                         # offload the blocking disk writes
                         await asyncio.to_thread(
@@ -238,9 +247,20 @@ async def amain():
                             f"row appended ({row_count}) -> {result.get('__source_file__')}"
                         )
                     else:
-                        logger.debug("Skipped a PDF because it returned None")
+                        fail_count += 1
+                        logger.warning(f"Failed: {pdf_path.name}")
+                        with open(failures_path, "a", encoding="utf-8") as fj:
+                            fj.write(
+                                json.dumps(
+                                    {"file": str(pdf_path.name), "time": time()},
+                                    ensure_ascii=False,
+                                )
+                                + "\n"
+                            )
 
         logger.info(f"Saved {row_count} rows to {parquet_path} and {csv_path}")
+        if fail_count:
+            logger.warning(f"{fail_count} PDFs failed — see {failures_path}")
         logger.info(f"Time taken: {time() - start_time:.2f} seconds")
 
     except KeyboardInterrupt:

@@ -1,8 +1,9 @@
 import base64
 import aiofiles
 import os
+import json
 from collections.abc import Mapping
-from typing import Any, Dict, Iterable, List
+from typing import Any, Iterable, List
 from pypdf import PdfReader
 import asyncio
 import re
@@ -21,7 +22,7 @@ REF_HEADER_RE = re.compile(
 )
 
 
-async def encode_pdf(pdf_path: str) -> str | None:
+async def encode_pdf(pdf_path: str | Path) -> str | None:
     """Asynchronously encode a PDF file to base64."""
     try:
         if not os.path.exists(pdf_path):
@@ -40,7 +41,7 @@ async def encode_pdf(pdf_path: str) -> str | None:
         return None
 
 
-async def get_pdf_page_count(path: str) -> int:
+async def get_pdf_page_count(path: str | Path) -> int:
     def _count():
         with open(path, "rb") as f:
             reader = PdfReader(f)
@@ -56,7 +57,7 @@ async def get_pdf_page_count(path: str) -> int:
     return await asyncio.to_thread(_count)
 
 
-async def _merge_values_async(a: Any, b: Any) -> Any:
+def _merge_values(a: Any, b: Any) -> Any:
     def _normalize_str(x):
         return x.strip() if isinstance(x, str) else x
 
@@ -68,21 +69,25 @@ async def _merge_values_async(a: Any, b: Any) -> Any:
     if _is_empty(a):
         return b
     if isinstance(a, list) and isinstance(b, list):
-        seen = set()
-        out = []
+        seen: set[str] = set()
+        out: list[Any] = []
         for x in a + b:
-            key = repr(x)
+            key = (
+                json.dumps(x, sort_keys=True, ensure_ascii=False)
+                if isinstance(x, (dict, list))
+                else repr(x)
+            )
             if key not in seen:
                 seen.add(key)
                 out.append(x)
         return out
     if isinstance(a, Mapping) and isinstance(b, Mapping):
-        return await merge_multiple_dicts_async([dict(a), dict(b)])
+        return merge_dicts([dict(a), dict(b)])
     return a
 
 
-async def merge_multiple_dicts_async(dicts: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
-    """Asynchronously merge multiple dictionaries using async merge logic."""
+def merge_dicts(dicts: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """Deeply merge multiple dictionaries: dedup lists, recurse into nested dicts."""
     dicts = list(dicts)
     if not dicts:
         return {}
@@ -95,12 +100,19 @@ async def merge_multiple_dicts_async(dicts: Iterable[Dict[str, Any]]) -> Dict[st
             if k not in merged:
                 merged[k] = v
             else:
-                merged[k] = await _merge_values_async(merged[k], v)
+                merged[k] = _merge_values(merged[k], v)
     return merged
 
 
+# Backward-compatible async wrapper (calls sync merge under the hood)
+async def merge_multiple_dicts_async(dicts: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """Async wrapper around merge_dicts for backward compatibility."""
+    return merge_dicts(dicts)
+
+
 def file_name_sha1(name: str) -> str:
-    return hashlib.sha1(name.encode("utf-8")).hexdigest()
+    """Hash filename for resume-mode identity tracking. Uses SHA256 despite the name."""
+    return hashlib.sha256(name.encode("utf-8")).hexdigest()
 
 
 # ---------- Realtime writers ----------
@@ -136,9 +148,15 @@ class ParquetAppender:
         table = pa.Table.from_pandas(pd.DataFrame([row]), preserve_index=False)
         if self._writer is None:
             if self.parquet_path.exists():
-                self.drop_empty_rows_pq()
-                existing = pq.read_table(self.parquet_path)
-                self._schema = existing.schema
+                try:
+                    self.drop_empty_rows_pq()
+                    existing = pq.read_table(self.parquet_path)
+                    self._schema = existing.schema
+                except Exception as e:
+                    logger.warning(
+                        f"Could not read existing Parquet file, starting fresh: {e}"
+                    )
+                    self._schema = table.schema
                 # Align new table to existing schema (add missing cols, order)
                 table = table_cast_like(table, self._schema)
                 self._writer = pq.ParquetWriter(
@@ -149,9 +167,8 @@ class ParquetAppender:
                 self._writer = pq.ParquetWriter(
                     self.parquet_path, self._schema, use_dictionary=True
                 )
-        else:
-            table = table_cast_like(table, self._schema)
 
+        table = table_cast_like(table, self._schema)
         self._writer.write_table(table)
 
     def drop_empty_rows_pq(self):
@@ -162,21 +179,35 @@ class ParquetAppender:
             (e.g., '123', '  12.5  ', '+3e-2'). Null 'Journal' is kept.
         """
         table = pq.read_table(self.parquet_path, memory_map=True)
-        src = table["__source_file__"]
-        mask_src = pc.and_(pc.is_valid(src), pc.not_equal(src, ""))
-        j = table["Journal"]
-        t = j.type
-        if pat.is_integer(t) or pat.is_floating(t):
-            mask_journal_keep = pc.is_null(j)
-        elif pat.is_string(t) or pat.is_large_string(t):
-            is_numeric_str = pc.match_substring_regex(
-                j, r"^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?\s*$"
+        mask = None
+
+        if "__source_file__" in table.column_names:
+            src = table["__source_file__"]
+            mask = pc.and_(pc.is_valid(src), pc.not_equal(src, ""))
+
+        if "Journal" in table.column_names:
+            j = table["Journal"]
+            t = j.type
+            if pat.is_integer(t) or pat.is_floating(t):
+                mask_journal_keep = pc.is_null(j)
+            elif pat.is_string(t) or pat.is_large_string(t):
+                is_numeric_str = pc.match_substring_regex(
+                    j, r"^\s*[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?\s*$"
+                )
+                mask_journal_keep = pc.or_(pc.is_null(j), pc.invert(is_numeric_str))
+            else:
+                mask_journal_keep = pc.is_valid(j)
+            mask = (
+                pc.and_(mask, mask_journal_keep)
+                if mask is not None
+                else mask_journal_keep
             )
-            mask_journal_keep = pc.or_(pc.is_null(j), pc.invert(is_numeric_str))
+
+        if mask is not None:
+            filtered = table.filter(mask)
         else:
-            mask_journal_keep = pc.is_valid(j)
-        final_mask = pc.and_(mask_src, mask_journal_keep)
-        filtered = table.filter(final_mask)
+            filtered = table
+
         pq.write_table(
             filtered,
             self.parquet_path,
@@ -246,14 +277,17 @@ def drop_empty_rows(csv_path: Path):
       - 'Journal' that is numeric (int-like or float-like)
     """
     df = pd.read_csv(csv_path)
-    df = df.dropna(subset=["__source_file__"])
+    if "__source_file__" in df.columns:
+        df = df.dropna(subset=["__source_file__"])
 
-    def is_numeric(x):
-        try:
-            float(str(x).strip())
-            return True
-        except Exception:
-            return False
+    if "Journal" in df.columns:
 
-    df = df[~df["Journal"].apply(is_numeric)]
+        def is_numeric(x):
+            try:
+                float(str(x).strip())
+                return True
+            except Exception:
+                return False
+
+        df = df[~df["Journal"].apply(is_numeric)]
     df.to_csv(csv_path, index=False)
