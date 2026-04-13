@@ -77,7 +77,11 @@ async def process_one_pdf_chunk(
         # 1) OCR call (blocking network)
         try:
             annotations_response, ocr_response = await run_all_payloads(
-                client, base64_pdf, pages=pages_chunk, image_annotation=image_annotation
+                client,
+                base64_pdf,
+                pages=pages_chunk,
+                image_annotation=image_annotation,
+                pdf_path=pdf_path,
             )
         except Exception as e:
             logger.error(f"OCR failed for {pdf_path.name}: {e}")

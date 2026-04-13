@@ -1,8 +1,10 @@
 import asyncio
+import base64
 import os
 from typing import List, Type, Dict, Any, Tuple
 import json
 import uuid
+from pathlib import Path
 
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
@@ -11,6 +13,7 @@ from mistralai import Mistral
 from mistralai.extra import response_format_from_pydantic_model
 from mistralai.models import OCRResponse
 from loguru import logger
+import fitz as pymupdf
 
 from info_extraction.extraction_payload import (
     Image,
@@ -61,6 +64,30 @@ def _is_retryable(e: Exception) -> bool:
     )
 
 
+def _is_invalid_pdf_error(e: Exception) -> bool:
+    """Check if the error is specifically a 'not a valid PDF' rejection."""
+    txt = str(e).lower()
+    return "document_parser_invalid_file" in txt or "not a valid pdf" in txt
+
+
+def _render_pages_to_images(
+    pdf_path: str | Path, pages: List[int], dpi: int = 200
+) -> List[str]:
+    """Render specific PDF pages to base64 PNG images using PyMuPDF."""
+    doc = pymupdf.open(str(pdf_path))
+    images = []
+    for page_num in pages:
+        if page_num >= len(doc):
+            continue
+        page = doc[page_num]
+        pix = page.get_pixmap(dpi=dpi)
+        img_bytes = pix.tobytes("png")
+        b64 = base64.b64encode(img_bytes).decode("utf-8")
+        images.append(b64)
+    doc.close()
+    return images
+
+
 @retry(
     reraise=True,
     stop=stop_after_attempt(5),
@@ -94,8 +121,6 @@ def _get_annotation_sync(
 
     if image_annotation:
         kwargs["bbox_annotation_format"] = response_format_from_pydantic_model(Image)
-        # If you truly need raw image bytes in the response, flip to True
-        # kwargs["include_image_base64"] = True
 
     try:
         return client.ocr.process(**kwargs)
@@ -103,6 +128,38 @@ def _get_annotation_sync(
         if _is_retryable(e):
             raise
         logger.error(f"Non-retryable OCR error: {e}")
+        return None
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=4, max=120),
+    retry=retry_if_exception(_is_retryable),
+)
+def _get_annotation_from_image_sync(
+    client: Mistral,
+    payload_cls: Type[BaseModel],
+    base64_image: str,
+    model_name: str = "mistral-ocr-latest",
+) -> OCRResponse | None:
+    """OCR a single page rendered as a PNG image."""
+    kwargs = {
+        "id": str(uuid.uuid4()),
+        "model": model_name,
+        "document": {
+            "type": "image_url",
+            "image_url": f"data:image/png;base64,{base64_image}",
+        },
+        "document_annotation_format": response_format_from_pydantic_model(payload_cls),
+        "include_image_base64": False,
+    }
+    try:
+        return client.ocr.process(**kwargs)
+    except Exception as e:
+        if _is_retryable(e):
+            raise
+        logger.error(f"Non-retryable image OCR error: {e}")
         return None
 
 
@@ -116,9 +173,10 @@ async def get_annotation_async(
     pages: List[int],
     image_annotation: bool = False,
     model_name: str = "mistral-ocr-latest",
+    pdf_path: str | Path | None = None,
 ) -> OCRResponse | None:
     await _rate_limiter.wait()
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         _get_annotation_sync,
         client,
         payload_cls,
@@ -127,6 +185,41 @@ async def get_annotation_async(
         image_annotation,
         model_name,
     )
+
+    # If PDF-based OCR returned None and we have a PDF path, try image fallback
+    if result is None and pdf_path is not None:
+        logger.info(
+            f"PDF OCR failed for {Path(pdf_path).name}, "
+            f"falling back to image-based OCR for pages {pages}"
+        )
+        base64_images = await asyncio.to_thread(
+            _render_pages_to_images, pdf_path, pages
+        )
+        if not base64_images:
+            return None
+
+        # OCR each page image and merge into a single combined response
+        image_tasks = []
+        for b64_img in base64_images:
+            await _rate_limiter.wait()
+            image_tasks.append(
+                asyncio.to_thread(
+                    _get_annotation_from_image_sync,
+                    client,
+                    payload_cls,
+                    b64_img,
+                    model_name,
+                )
+            )
+        image_results = await asyncio.gather(*image_tasks, return_exceptions=True)
+
+        # Return the first successful response (annotations merge at a higher level)
+        for r in image_results:
+            if isinstance(r, OCRResponse) and r is not None:
+                return r
+        return None
+
+    return result
 
 
 # ---------------- convenience: run all payload schemas ----------------
@@ -138,10 +231,14 @@ async def run_all_payloads(
     pages: List[int],
     image_annotation: bool = False,
     model_name: str = "mistral-ocr-latest",
+    pdf_path: str | Path | None = None,
 ) -> Tuple[Dict[str, Any], OCRResponse]:
     """
     Executes OCR with all payload schemas and merges the
     document_annotation JSON objects into one flat dict.
+
+    If pdf_path is provided and PDF-based OCR fails (e.g., "not a valid PDF"),
+    falls back to rendering pages as images and using image-based OCR.
     """
     payload_classes = EXTRACTION_SCHEMAS
 
@@ -153,6 +250,7 @@ async def run_all_payloads(
             pages,
             image_annotation=image_annotation,
             model_name=model_name,
+            pdf_path=pdf_path,
         )
         for cls in payload_classes
     ]

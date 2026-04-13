@@ -1,10 +1,11 @@
 import base64
 import aiofiles
+import io
 import os
 import json
 from collections.abc import Mapping
 from typing import Any, Iterable, List
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 import fitz as pymupdf
 import asyncio
 import re
@@ -24,14 +25,24 @@ REF_HEADER_RE = re.compile(
 
 
 def _repair_pdf_bytes(raw: bytes) -> bytes:
-    """Re-save PDF through PyMuPDF to fix structural issues.
+    """Rebuild PDF from scratch to fix structural issues.
 
     Some PDFs have non-standard internal structures that cause Mistral's
-    parser to reject them.  Re-saving with garbage collection and deflation
-    produces a clean PDF that the API accepts.
+    parser to reject them.  A two-pass rebuild (pypdf page extraction,
+    then PyMuPDF clean-up) produces a fully clean PDF.
     """
     try:
-        doc = pymupdf.open(stream=raw, filetype="pdf")
+        # Pass 1: rebuild page-by-page with pypdf (strips bad internal refs)
+        reader = PdfReader(io.BytesIO(raw))
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+        buf = io.BytesIO()
+        writer.write(buf)
+        intermediate = buf.getvalue()
+
+        # Pass 2: clean up with PyMuPDF (garbage collection + deflation)
+        doc = pymupdf.open(stream=intermediate, filetype="pdf")
         repaired = doc.tobytes(deflate=True, garbage=4)
         doc.close()
         return repaired
