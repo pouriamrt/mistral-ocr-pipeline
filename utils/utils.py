@@ -5,6 +5,7 @@ import json
 from collections.abc import Mapping
 from typing import Any, Iterable, List
 from pypdf import PdfReader
+import fitz as pymupdf
 import asyncio
 import re
 import hashlib
@@ -22,8 +23,28 @@ REF_HEADER_RE = re.compile(
 )
 
 
+def _repair_pdf_bytes(raw: bytes) -> bytes:
+    """Re-save PDF through PyMuPDF to fix structural issues.
+
+    Some PDFs have non-standard internal structures that cause Mistral's
+    parser to reject them.  Re-saving with garbage collection and deflation
+    produces a clean PDF that the API accepts.
+    """
+    try:
+        doc = pymupdf.open(stream=raw, filetype="pdf")
+        repaired = doc.tobytes(deflate=True, garbage=4)
+        doc.close()
+        return repaired
+    except Exception:
+        return raw  # return original if repair fails
+
+
 async def encode_pdf(pdf_path: str | Path) -> str | None:
-    """Asynchronously encode a PDF file to base64."""
+    """Asynchronously encode a PDF file to base64.
+
+    Applies a repair pass via PyMuPDF before encoding to handle PDFs with
+    structural issues that Mistral's OCR parser would otherwise reject.
+    """
     try:
         if not os.path.exists(pdf_path):
             logger.error(f"The file {pdf_path} was not found.")
@@ -31,7 +52,13 @@ async def encode_pdf(pdf_path: str | Path) -> str | None:
 
         async with aiofiles.open(pdf_path, "rb") as pdf_file:
             data = await pdf_file.read()
-            return base64.b64encode(data).decode("utf-8")
+            repaired = await asyncio.to_thread(_repair_pdf_bytes, data)
+            if len(repaired) != len(data):
+                logger.debug(
+                    f"PDF repaired: {Path(pdf_path).name} "
+                    f"({len(data)} -> {len(repaired)} bytes)"
+                )
+            return base64.b64encode(repaired).decode("utf-8")
 
     except FileNotFoundError:
         logger.error(f"The file {pdf_path} was not found.")
