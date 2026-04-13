@@ -53,8 +53,10 @@ def _repair_pdf_bytes(raw: bytes) -> bytes:
 async def encode_pdf(pdf_path: str | Path) -> str | None:
     """Asynchronously encode a PDF file to base64.
 
-    Applies a repair pass via PyMuPDF before encoding to handle PDFs with
-    structural issues that Mistral's OCR parser would otherwise reject.
+    Sends the original PDF bytes without modification. PDF repair is NOT
+    applied here because it strips fonts/metadata that Mistral uses for
+    extraction. The image-based fallback in get_annotations handles the
+    rare PDFs that Mistral's parser rejects.
     """
     try:
         if not os.path.exists(pdf_path):
@@ -63,13 +65,7 @@ async def encode_pdf(pdf_path: str | Path) -> str | None:
 
         async with aiofiles.open(pdf_path, "rb") as pdf_file:
             data = await pdf_file.read()
-            repaired = await asyncio.to_thread(_repair_pdf_bytes, data)
-            if len(repaired) != len(data):
-                logger.debug(
-                    f"PDF repaired: {Path(pdf_path).name} "
-                    f"({len(data)} -> {len(repaired)} bytes)"
-                )
-            return base64.b64encode(repaired).decode("utf-8")
+            return base64.b64encode(data).decode("utf-8")
 
     except FileNotFoundError:
         logger.error(f"The file {pdf_path} was not found.")

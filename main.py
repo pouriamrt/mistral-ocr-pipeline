@@ -111,6 +111,54 @@ async def process_one_pdf_chunk(
         return {"__chunk_start__": chunk_start, **(row or {})}
 
 
+def _postprocess_row(row: dict) -> dict:
+    """Fix common model output issues: NaN gates, consistency enforcement.
+
+    Mistral sometimes returns null for the outcome gate field even when
+    clinical outcomes are present.  This step infers missing values and
+    enforces cross-field consistency.
+    """
+    gate_key = "Clinical outcomes measured?"
+    outcomes_key = "Clinical Outcomes"
+    followup_key = "Clinical Outcome - follow-up duration"
+    definition_key = "Clinical Outcome - definition"
+
+    gate_val = row.get(gate_key)
+    outcomes_val = row.get(outcomes_key)
+
+    # --- Infer missing gate from outcomes ---
+    has_outcomes = (
+        outcomes_val is not None
+        and outcomes_val != []
+        and outcomes_val != ""
+        and str(outcomes_val).strip() not in ("", "[]", "None", "nan")
+    )
+
+    if gate_val is None or str(gate_val).strip() in ("", "None", "nan"):
+        if has_outcomes:
+            row[gate_key] = "Yes"
+            logger.debug(
+                "Post-process: inferred outcome gate=Yes from populated outcomes"
+            )
+        else:
+            row[gate_key] = "No"
+            logger.debug("Post-process: inferred outcome gate=No (no outcomes found)")
+
+    # --- Enforce consistency: gate=No means all outcome fields must be null ---
+    if str(row.get(gate_key, "")).strip() == "No":
+        for key in (outcomes_key, followup_key, definition_key):
+            if row.get(key) is not None and str(row.get(key)).strip() not in (
+                "",
+                "[]",
+                "None",
+                "nan",
+            ):
+                logger.debug(f"Post-process: clearing {key} because gate=No")
+                row[key] = None
+
+    return row
+
+
 async def process_one_pdf(
     pdf_path: Path,
     client: Mistral,
@@ -135,7 +183,7 @@ async def process_one_pdf(
             return None
         result = {k: v for k, v in result.items() if k != "__chunk_start__"}
         result["__source_file__"] = str(file_name_sha1(pdf_path.name))
-        return result
+        return _postprocess_row(result)
 
     chunk_tasks = []
     for start in range(0, pages, MAX_PAGES_PER_REQ):
@@ -167,7 +215,7 @@ async def process_one_pdf(
 
     merged = await merge_multiple_dicts_async(rows)
     merged["__source_file__"] = str(file_name_sha1(pdf_path.name))
-    return merged
+    return _postprocess_row(merged)
 
 
 async def amain():
