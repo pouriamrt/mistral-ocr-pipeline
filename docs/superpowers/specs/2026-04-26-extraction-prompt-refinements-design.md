@@ -234,9 +234,10 @@ No automated test suite is added in this iteration. Validation is the existing m
 | Risk | Mitigation |
 |------|------------|
 | Longer prompts may overflow Mistral OCR's context budget per chunk | Edits are additive but bounded — total per-field description growth is well under 1k tokens; prompts already include comparable-sized blocks |
-| Rebalanced trough/peak triggers could misclassify edge cases | The lexicon ordering change is conservative — primary triggers are well-established trough phrasing (predose, pre-dose, before next dose) that Joseph confirmed clinically |
+| New peak/trough lexicon entries could misclassify ambiguous hour-windows | The new `HOUR-WINDOW DISAMBIGUATION` block is explicit about narrow vs broad windows, and the existing trough/peak triggers are unchanged except for the single addition of `immediately prior to next dose` |
 | Acute-care inference rule could over-apply "Random" in legitimate PK studies | The rule is gated on stroke/hip-fracture/trauma/urgent presentation context and is overridden by any explicit peak/trough sampling statement |
-| `Guide clinical decision-making` tightening could miss legitimate decision-driven studies | The prompt explicitly lists three positive examples (surgery proceeded, reversal administered, thrombolysis eligibility) so the model has clear positive anchors |
+| `NON-ORIGINAL-RESEARCH PAPERS` rule on the outcome gate could misclassify systematic reviews/meta-analyses that report pooled outcomes | The rule explicitly names "position paper, clinical guidance document, narrative review, or scoping review" — systematic reviews and meta-analyses are not in the exclusion list, so their pooled outcomes still count |
+| `clinical_outcome_followup_flat` linkage rule could exclude legitimate study-wide follow-up that applies to all outcomes | The rule allows "general study-duration phrases DO NOT qualify" but the existing fallback ("If only one overall follow-up duration is reported: Apply that duration to all outcomes measured") in the existing prompt is preserved unchanged |
 
 ## Reference: stakeholder decision log
 
