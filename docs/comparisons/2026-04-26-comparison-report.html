@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IE-Mistral — Human vs LLM Extraction Report</title>
+<style>
+:root{--bg:#0f172a;--s1:#1e293b;--s2:#334155;--s3:#475569;--t1:#f8fafc;--t2:#e2e8f0;--t3:#94a3b8;--accent:#3b82f6;--green:#22c55e;--lime:#84cc16;--yellow:#eab308;--orange:#f97316;--red:#ef4444;--blue:#60a5fa;--gray:#6b7280;--slate:#94a3b8}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--t2);padding:2rem 3rem;line-height:1.6}
+h1{font-size:2rem;color:var(--t1);margin-bottom:.3rem}
+h2{font-size:1.35rem;color:var(--t1);margin:2.5rem 0 1rem;border-bottom:2px solid var(--s3);padding-bottom:.5rem}
+h3{font-size:1.05rem;color:var(--t2);margin:1.5rem 0 .7rem}
+.sub{color:var(--t3);margin-bottom:2rem;font-size:.95rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin:1.5rem 0}
+.card{background:var(--s1);border:1px solid var(--s3);border-radius:14px;padding:1.3rem;text-align:center}
+.card .label{font-size:.75rem;color:var(--t3);text-transform:uppercase;letter-spacing:.06em}
+.card .val{font-size:2.2rem;font-weight:800;margin:.2rem 0}
+.card .note{font-size:.82rem;color:var(--t3)}
+.bar{display:flex;height:26px;border-radius:7px;overflow:hidden;margin:.6rem 0}
+.bar div{display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#0f172a;min-width:2px;transition:width .3s}
+table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.85rem}
+th{background:var(--s2);text-align:left;padding:.6rem .8rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;color:var(--t3);position:sticky;top:0;z-index:1}
+td{padding:.5rem .8rem;border-bottom:1px solid var(--s3)}
+tr:hover td{background:var(--s1)}
+.badge{display:inline-block;padding:2px 10px;border-radius:5px;font-size:.73rem;font-weight:700;color:#0f172a}
+.pbar{display:inline-block;height:8px;border-radius:4px;vertical-align:middle;margin-right:6px}
+.legend{display:flex;flex-wrap:wrap;gap:.9rem;margin:1rem 0}
+.legend-i{display:flex;align-items:center;gap:.35rem;font-size:.82rem;color:var(--t3)}
+.legend-d{width:13px;height:13px;border-radius:3px}
+.scroll{max-height:600px;overflow-y:auto}
+.methodology{background:var(--s1);border:1px solid var(--s3);border-radius:12px;padding:1.5rem;margin:1.5rem 0}
+.methodology h3{margin-top:0}
+.methodology li{margin-bottom:.3rem;color:var(--t3)}
+.methodology code{background:var(--s2);padding:2px 6px;border-radius:3px;font-size:.82rem;color:var(--t2)}
+.delta-section{background:var(--s1);border:1px solid var(--accent);border-radius:12px;padding:1.5rem;margin:1.5rem 0}
+.delta-section h3{margin-top:0;color:var(--accent)}
+.delta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem;margin:.8rem 0}
+.delta-item{display:flex;justify-content:space-between;align-items:center;padding:.4rem .6rem;border-radius:6px;background:var(--s2)}
+.delta-item .field-name{color:var(--t2);font-size:.85rem}
+.delta-item .values{font-size:.82rem;display:flex;gap:.6rem;align-items:center}
+footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--s3);color:var(--t3);font-size:.78rem}
+</style>
+</head>
+<body>
+
+<h1>Human vs LLM: Extraction Accuracy Report</h1>
+<p class="sub">Semantic comparison of manual review (Covidence, 50 papers) against Mistral OCR + LLM extraction pipeline</p>
+<div class="methodology">
+<h3>Comparison Methodology</h3>
+<ul>
+<li><strong>Matching:</strong> Papers matched by title similarity (fuzzy, threshold 0.6) with fallback to year + journal combination.</li>
+<li><strong>Semantic comparison:</strong> Each field is compared at the <em>concept level</em>, not keyword level. Both human and LLM values are mapped to canonical clinical/scientific concepts before comparison.</li>
+<li><strong>Scoring:</strong> <code>Exact</code> = 1.0, <code>Close/Compatible</code> = 0.7-0.85, <code>Partial</code> = 0.25-0.75 (Jaccard-weighted), <code>Extra</code> = 0.25, <code>Missing/Disagree</code> = 0.0. <code>Both Empty</code> excluded from scoring.</li>
+<li><strong>Study design:</strong> Uses compatibility groups (e.g., "Cohort Study" and "Non-Randomized Observational Study" are compatible at 0.7).</li>
+<li><strong>Clinical outcomes:</strong> Human's separate Yes/No flags (Bleeding, Stroke/TIA, DVT/PE) are unified into a concept set and compared against LLM's list extraction. "Thromboembolism" maps to both Stroke/TIA and DVT/PE.</li>
+<li><strong>Comparator assays &amp; coagulation tests:</strong> Both sides mapped to canonical assay concepts (PT, aPTT, TGA, anti-Xa, VET, etc.) regardless of naming differences.</li>
+</ul></div>
+<div class="grid">
+<div class="card"><div class="label">Overall Semantic Accuracy</div><div class="val" style="color:var(--green)">72.7%</div><div class="note">525 scored comparisons</div></div>
+<div class="card"><div class="label">Papers Matched</div><div class="val">50<span style="font-size:1rem;color:var(--t3)">/50</span></div><div class="note">multi-signal matching</div></div>
+<div class="card"><div class="label">Fields Compared</div><div class="val">13</div><div class="note">6 categories</div></div>
+<div class="card"><div class="label">Agreement Rate</div><div class="val" style="color:var(--lime)">66%</div><div class="note">exact + close matches</div></div>
+<div class="card"><div class="label">Disagreement Rate</div><div class="val" style="color:var(--red)">7%</div><div class="note">semantic mismatches</div></div>
+</div>
+<div class="legend">
+<div class="legend-i"><div class="legend-d" style="background:#22c55e"></div>Exact Match (330)</div>
+<div class="legend-i"><div class="legend-d" style="background:#84cc16"></div>Close / Compatible (19)</div>
+<div class="legend-i"><div class="legend-d" style="background:#eab308"></div>Partial Overlap (58)</div>
+<div class="legend-i"><div class="legend-d" style="background:#94a3b8"></div>Both Empty (125)</div>
+<div class="legend-i"><div class="legend-d" style="background:#60a5fa"></div>LLM Found Extra (29)</div>
+<div class="legend-i"><div class="legend-d" style="background:#f97316"></div>LLM Missed (50)</div>
+<div class="legend-i"><div class="legend-d" style="background:#ef4444"></div>Disagreement (39)</div>
+</div>
+<div class="bar">
+<div style="width:50.76923076923077%;background:#22c55e" title="Exact Match: 330">330</div>
+<div style="width:2.923076923076923%;background:#84cc16" title="Close / Compatible: 19">19</div>
+<div style="width:8.923076923076923%;background:#eab308" title="Partial Overlap: 58">58</div>
+<div style="width:19.230769230769234%;background:#94a3b8" title="Both Empty: 125">125</div>
+<div style="width:4.461538461538462%;background:#60a5fa" title="LLM Found Extra: 29">29</div>
+<div style="width:7.6923076923076925%;background:#f97316" title="LLM Missed: 50">50</div>
+<div style="width:6.0%;background:#ef4444" title="Disagreement: 39">39</div>
+</div>
+<h2>Accuracy by Category</h2>
+<table><thead><tr><th>Category</th><th>Accuracy</th><th>N</th><th>Distribution</th></tr></thead><tbody>
+<tr><td style="font-weight:600">Meta &amp; Design</td>
+<td style="color:var(--green);font-weight:700">87.5%</td>
+<td>200</td>
+<td><div class="bar" style="height:18px">
+<div style="width:81.0%;background:#22c55e" title="Exact Match: 162"></div>
+<div style="width:9.5%;background:#84cc16" title="Close / Compatible: 19"></div>
+<div style="width:0.5%;background:#60a5fa" title="LLM Found Extra: 1"></div>
+<div style="width:3.5000000000000004%;background:#f97316" title="LLM Missed: 7"></div>
+<div style="width:5.5%;background:#ef4444" title="Disagreement: 11"></div>
+</div></td></tr>
+<tr><td style="font-weight:600">Population</td>
+<td style="color:var(--green);font-weight:700">75.8%</td>
+<td>141</td>
+<td><div class="bar" style="height:18px">
+<div style="width:63.33333333333333%;background:#22c55e" title="Exact Match: 95"></div>
+<div style="width:14.666666666666666%;background:#eab308" title="Partial Overlap: 22"></div>
+<div style="width:6.0%;background:#94a3b8" title="Both Empty: 9"></div>
+<div style="width:1.3333333333333335%;background:#60a5fa" title="LLM Found Extra: 2"></div>
+<div style="width:6.666666666666667%;background:#f97316" title="LLM Missed: 10"></div>
+<div style="width:8.0%;background:#ef4444" title="Disagreement: 12"></div>
+</div></td></tr>
+<tr><td style="font-weight:600">Methods</td>
+<td style="color:var(--green);font-weight:700">80.1%</td>
+<td>33</td>
+<td><div class="bar" style="height:18px">
+<div style="width:46.0%;background:#22c55e" title="Exact Match: 23"></div>
+<div style="width:6.0%;background:#eab308" title="Partial Overlap: 3"></div>
+<div style="width:34.0%;background:#94a3b8" title="Both Empty: 17"></div>
+<div style="width:14.000000000000002%;background:#60a5fa" title="LLM Found Extra: 7"></div>
+</div></td></tr>
+<tr><td style="font-weight:600">Timing &amp; Thresholds</td>
+<td style="color:var(--red);font-weight:700">45.2%</td>
+<td>70</td>
+<td><div class="bar" style="height:18px">
+<div style="width:25.0%;background:#22c55e" title="Exact Match: 25"></div>
+<div style="width:9.0%;background:#eab308" title="Partial Overlap: 9"></div>
+<div style="width:30.0%;background:#94a3b8" title="Both Empty: 30"></div>
+<div style="width:8.0%;background:#60a5fa" title="LLM Found Extra: 8"></div>
+<div style="width:15.0%;background:#f97316" title="LLM Missed: 15"></div>
+<div style="width:13.0%;background:#ef4444" title="Disagreement: 13"></div>
+</div></td></tr>
+<tr><td style="font-weight:600">Clinical Outcomes</td>
+<td style="color:var(--red);font-weight:700">56.2%</td>
+<td>28</td>
+<td><div class="bar" style="height:18px">
+<div style="width:16.0%;background:#22c55e" title="Exact Match: 8"></div>
+<div style="width:22.0%;background:#eab308" title="Partial Overlap: 11"></div>
+<div style="width:44.0%;background:#94a3b8" title="Both Empty: 22"></div>
+<div style="width:10.0%;background:#60a5fa" title="LLM Found Extra: 5"></div>
+<div style="width:8.0%;background:#f97316" title="LLM Missed: 4"></div>
+</div></td></tr>
+<tr><td style="font-weight:600">Diagnostic</td>
+<td style="color:var(--red);font-weight:700">48.8%</td>
+<td>53</td>
+<td><div class="bar" style="height:18px">
+<div style="width:17.0%;background:#22c55e" title="Exact Match: 17"></div>
+<div style="width:13.0%;background:#eab308" title="Partial Overlap: 13"></div>
+<div style="width:47.0%;background:#94a3b8" title="Both Empty: 47"></div>
+<div style="width:6.0%;background:#60a5fa" title="LLM Found Extra: 6"></div>
+<div style="width:14.000000000000002%;background:#f97316" title="LLM Missed: 14"></div>
+<div style="width:3.0%;background:#ef4444" title="Disagreement: 3"></div>
+</div></td></tr>
+</tbody></table>
+<h2>Accuracy by Field</h2>
+<table><thead><tr><th>Field</th><th>Category</th><th>Accuracy</th><th>Exact</th><th>Close</th><th>Partial</th><th>Missed</th><th>Disagree</th><th>N/A</th></tr></thead><tbody>
+<tr><td>Journal</td>
+<td style="color:var(--t3)">Meta &amp; Design</td>
+<td><span class="pbar" style="width:54.48px;background:var(--green)"></span><span style="color:var(--green);font-weight:700">91%</span></td>
+<td>44</td><td>2</td><td>0</td>
+<td style="color:var(--orange)">1</td>
+<td style="color:var(--red)">3</td>
+<td>0</td></tr>
+<tr><td>Publication Year</td>
+<td style="color:var(--t3)">Meta &amp; Design</td>
+<td><span class="pbar" style="width:56.699999999999996px;background:var(--green)"></span><span style="color:var(--green);font-weight:700">94%</span></td>
+<td>47</td><td>0</td><td>0</td>
+<td style="color:var(--orange)">1</td>
+<td style="color:var(--red)">1</td>
+<td>0</td></tr>
+<tr><td>Country</td>
+<td style="color:var(--t3)">Meta &amp; Design</td>
+<td><span class="pbar" style="width:51.54px;background:var(--green)"></span><span style="color:var(--green);font-weight:700">86%</span></td>
+<td>38</td><td>6</td><td>0</td>
+<td style="color:var(--orange)">5</td>
+<td style="color:var(--red)">1</td>
+<td>0</td></tr>
+<tr><td>Study Design</td>
+<td style="color:var(--t3)">Meta &amp; Design</td>
+<td><span class="pbar" style="width:47.16px;background:var(--green)"></span><span style="color:var(--green);font-weight:700">79%</span></td>
+<td>33</td><td>11</td><td>0</td>
+<td style="color:var(--orange)">0</td>
+<td style="color:var(--red)">6</td>
+<td>0</td></tr>
+<tr><td>DOACs Included</td>
+<td style="color:var(--t3)">Population</td>
+<td><span class="pbar" style="width:59.699999999999996px;background:var(--green)"></span><span style="color:var(--green);font-weight:700">100%</span></td>
+<td>49</td><td>0</td><td>1</td>
+<td style="color:var(--orange)">0</td>
+<td style="color:var(--red)">0</td>
+<td>0</td></tr>
+<tr><td>Indications</td>
+<td style="color:var(--t3)">Population</td>
+<td><span class="pbar" style="width:50.800000000000004px;background:var(--green)"></span><span style="color:var(--green);font-weight:700">85%</span></td>
+<td>40</td><td>0</td><td>5</td>
+<td style="color:var(--orange)">0</td>
+<td style="color:var(--red)">5</td>
+<td>0</td></tr>
+<tr><td>Relevant Subgroups</td>
+<td style="color:var(--t3)">Population</td>
+<td><span class="pbar" style="width:21.707317073170728px;background:var(--red)"></span><span style="color:var(--red);font-weight:700">36%</span></td>
+<td>6</td><td>0</td><td>16</td>
+<td style="color:var(--orange)">10</td>
+<td style="color:var(--red)">7</td>
+<td>9</td></tr>
+<tr><td>Coagulation Tests</td>
+<td style="color:var(--t3)">Methods</td>
+<td><span class="pbar" style="width:48.03030303030303px;background:var(--green)"></span><span style="color:var(--green);font-weight:700">80%</span></td>
+<td>23</td><td>0</td><td>3</td>
+<td style="color:var(--orange)">0</td>
+<td style="color:var(--red)">0</td>
+<td>17</td></tr>
+<tr><td>Timing of Measurement</td>
+<td style="color:var(--t3)">Timing &amp; Thresholds</td>
+<td><span class="pbar" style="width:27.2px;background:var(--red)"></span><span style="color:var(--red);font-weight:700">45%</span></td>
+<td>18</td><td>0</td><td>9</td>
+<td style="color:var(--orange)">10</td>
+<td style="color:var(--red)">13</td>
+<td>0</td></tr>
+<tr><td>Thresholds/Cutoffs</td>
+<td style="color:var(--t3)">Timing &amp; Thresholds</td>
+<td><span class="pbar" style="width:27.0px;background:var(--red)"></span><span style="color:var(--red);font-weight:700">45%</span></td>
+<td>7</td><td>0</td><td>0</td>
+<td style="color:var(--orange)">5</td>
+<td style="color:var(--red)">0</td>
+<td>30</td></tr>
+<tr><td>Clinical Outcomes</td>
+<td style="color:var(--t3)">Clinical Outcomes</td>
+<td><span class="pbar" style="width:33.75px;background:var(--red)"></span><span style="color:var(--red);font-weight:700">56%</span></td>
+<td>8</td><td>0</td><td>11</td>
+<td style="color:var(--orange)">4</td>
+<td style="color:var(--red)">0</td>
+<td>22</td></tr>
+<tr><td>Comparator Assays</td>
+<td style="color:var(--t3)">Diagnostic</td>
+<td><span class="pbar" style="width:25.733333333333334px;background:var(--red)"></span><span style="color:var(--red);font-weight:700">43%</span></td>
+<td>7</td><td>0</td><td>9</td>
+<td style="color:var(--orange)">11</td>
+<td style="color:var(--red)">1</td>
+<td>20</td></tr>
+<tr><td>Diagnostic Performance</td>
+<td style="color:var(--t3)">Diagnostic</td>
+<td><span class="pbar" style="width:33.91304347826087px;background:var(--red)"></span><span style="color:var(--red);font-weight:700">57%</span></td>
+<td>10</td><td>0</td><td>4</td>
+<td style="color:var(--orange)">3</td>
+<td style="color:var(--red)">2</td>
+<td>27</td></tr>
+</tbody></table>
+<h2>Accuracy by Paper</h2>
+<div class="scroll"><table><thead><tr><th>Paper</th><th>Accuracy</th><th style="width:200px">Distribution</th><th>Exact</th><th>Close</th><th>Disagree</th><th>Missed</th></tr></thead><tbody>
+<tr><td>Squizzato 2022</td>
+<td style="color:var(--red);font-weight:700">50%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:30.76923076923077%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:23.076923076923077%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>4</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">3</td></tr>
+<tr><td>Meinel 2023</td>
+<td style="color:var(--red);font-weight:700">53%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:38.46153846153847%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:23.076923076923077%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>5</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">3</td></tr>
+<tr><td>Hu 2015</td>
+<td style="color:var(--red);font-weight:700">55%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:30.76923076923077%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">4</td></tr>
+<tr><td>Comuth 2018</td>
+<td style="color:var(--red);font-weight:700">56%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:30.76923076923077%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:30.76923076923077%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#60a5fa"></div>
+<div style="width:15.384615384615385%;background:#ef4444"></div>
+</div></td>
+<td>4</td><td>0</td>
+<td style="color:var(--red)">2</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Jaffer 2015</td>
+<td style="color:var(--red);font-weight:700">56%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:23.076923076923077%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+<div style="width:15.384615384615385%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">2</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Menon 2018</td>
+<td style="color:var(--red);font-weight:700">58%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:30.76923076923077%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">4</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Kozlov 2019</td>
+<td style="color:var(--red);font-weight:700">58%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:38.46153846153847%;background:#22c55e"></div>
+<div style="width:30.76923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:15.384615384615385%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>5</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">2</td></tr>
+<tr><td>Cavaillez 2021</td>
+<td style="color:var(--yellow);font-weight:700">60%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:23.076923076923077%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">3</td></tr>
+<tr><td>P&#x27;ng 2024</td>
+<td style="color:var(--yellow);font-weight:700">60%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:23.076923076923077%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">3</td></tr>
+<tr><td>Sairaku 2020</td>
+<td style="color:var(--yellow);font-weight:700">62%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+<div style="width:15.384615384615385%;background:#ef4444"></div>
+</div></td>
+<td>7</td><td>0</td>
+<td style="color:var(--red)">2</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Tanigawa 2013</td>
+<td style="color:var(--yellow);font-weight:700">65%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:38.46153846153847%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:15.384615384615385%;background:#ef4444"></div>
+</div></td>
+<td>5</td><td>2</td>
+<td style="color:var(--red)">2</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Mills 2012</td>
+<td style="color:var(--yellow);font-weight:700">65%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:23.076923076923077%;background:#f97316"></div>
+</div></td>
+<td>7</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">3</td></tr>
+<tr><td>Amundsen 2024</td>
+<td style="color:var(--yellow);font-weight:700">65%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>7</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Gavrilova 2023</td>
+<td style="color:var(--yellow);font-weight:700">66%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:30.76923076923077%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:38.46153846153847%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+</div></td>
+<td>4</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Ezekowitz 2007</td>
+<td style="color:var(--yellow);font-weight:700">68%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:38.46153846153847%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:23.076923076923077%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#f97316"></div>
+</div></td>
+<td>5</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">2</td></tr>
+<tr><td>Ashton 2021</td>
+<td style="color:var(--yellow);font-weight:700">69%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:38.46153846153847%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:30.76923076923077%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#f97316"></div>
+</div></td>
+<td>5</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">2</td></tr>
+<tr><td>Bhagirath 2017</td>
+<td style="color:var(--yellow);font-weight:700">69%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:23.076923076923077%;background:#f97316"></div>
+</div></td>
+<td>6</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">3</td></tr>
+<tr><td>Dias 2016</td>
+<td style="color:var(--green);font-weight:700">70%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">2</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Terrier 2023</td>
+<td style="color:var(--green);font-weight:700">71%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:38.46153846153847%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:38.46153846153847%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#ef4444"></div>
+</div></td>
+<td>5</td><td>0</td>
+<td style="color:var(--red)">2</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Testa 2019</td>
+<td style="color:var(--green);font-weight:700">71%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:61.53846153846154%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:23.076923076923077%;background:#f97316"></div>
+</div></td>
+<td>8</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">3</td></tr>
+<tr><td>Zhang 2020</td>
+<td style="color:var(--green);font-weight:700">71%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:38.46153846153847%;background:#22c55e"></div>
+<div style="width:46.15384615384615%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#ef4444"></div>
+</div></td>
+<td>5</td><td>0</td>
+<td style="color:var(--red)">2</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Cappannoli 2022</td>
+<td style="color:var(--green);font-weight:700">72%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+</div></td>
+<td>7</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Solms 2020</td>
+<td style="color:var(--green);font-weight:700">72%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Lin 2021</td>
+<td style="color:var(--green);font-weight:700">72%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:30.76923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Wendte 2016</td>
+<td style="color:var(--green);font-weight:700">72%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>7</td><td>1</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Shin 2018</td>
+<td style="color:var(--green);font-weight:700">72%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:61.53846153846154%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>8</td><td>1</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">2</td></tr>
+<tr><td>Liu 2022</td>
+<td style="color:var(--green);font-weight:700">73%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:61.53846153846154%;background:#22c55e"></div>
+<div style="width:23.076923076923077%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>8</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Zabczyk 2021</td>
+<td style="color:var(--green);font-weight:700">73%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>7</td><td>1</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Yamashita 2024</td>
+<td style="color:var(--green);font-weight:700">75%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:38.46153846153847%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#f97316"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">2</td></tr>
+<tr><td>Lenoir 2022</td>
+<td style="color:var(--green);font-weight:700">76%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Verhamme 2016</td>
+<td style="color:var(--green);font-weight:700">76%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>7</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Kroll 2017</td>
+<td style="color:var(--green);font-weight:700">77%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>7</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Maas 2018</td>
+<td style="color:var(--green);font-weight:700">77%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#84cc16"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>6</td><td>2</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Kok 2022</td>
+<td style="color:var(--green);font-weight:700">79%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#60a5fa"></div>
+</div></td>
+<td>6</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Yates 2016</td>
+<td style="color:var(--green);font-weight:700">80%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>7</td><td>1</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Gosselin 2015</td>
+<td style="color:var(--green);font-weight:700">81%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:30.76923076923077%;background:#94a3b8"></div>
+</div></td>
+<td>6</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Kopytek 2020</td>
+<td style="color:var(--green);font-weight:700">81%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:61.53846153846154%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+</div></td>
+<td>8</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Nakagawa 2023</td>
+<td style="color:var(--green);font-weight:700">81%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:46.15384615384615%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:38.46153846153847%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+</div></td>
+<td>6</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Chang 2016</td>
+<td style="color:var(--green);font-weight:700">81%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:69.23076923076923%;background:#22c55e"></div>
+<div style="width:23.076923076923077%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>9</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Lin 2020</td>
+<td style="color:var(--green);font-weight:700">82%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:61.53846153846154%;background:#22c55e"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+</div></td>
+<td>8</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Lin 2019</td>
+<td style="color:var(--green);font-weight:700">83%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+</div></td>
+<td>7</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Baumann-Durchschein 2017</td>
+<td style="color:var(--green);font-weight:700">83%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:76.92307692307693%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>10</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Green 2019</td>
+<td style="color:var(--green);font-weight:700">84%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:30.76923076923077%;background:#eab308"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+</div></td>
+<td>7</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Eikelboom 2013</td>
+<td style="color:var(--green);font-weight:700">85%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:61.53846153846154%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:15.384615384615385%;background:#94a3b8"></div>
+<div style="width:15.384615384615385%;background:#60a5fa"></div>
+</div></td>
+<td>8</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Zhu 2022</td>
+<td style="color:var(--green);font-weight:700">86%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#60a5fa"></div>
+</div></td>
+<td>7</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Berge 2024</td>
+<td style="color:var(--green);font-weight:700">88%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:53.84615384615385%;background:#22c55e"></div>
+<div style="width:38.46153846153847%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>7</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Testa 2018</td>
+<td style="color:var(--green);font-weight:700">89%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:61.53846153846154%;background:#22c55e"></div>
+<div style="width:30.76923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#ef4444"></div>
+</div></td>
+<td>8</td><td>0</td>
+<td style="color:var(--red)">1</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Perlman 2019</td>
+<td style="color:var(--green);font-weight:700">90%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:69.23076923076923%;background:#22c55e"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+<div style="width:7.6923076923076925%;background:#f97316"></div>
+</div></td>
+<td>9</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">1</td></tr>
+<tr><td>Foulon-Pinto 2022</td>
+<td style="color:var(--green);font-weight:700">92%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:69.23076923076923%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#84cc16"></div>
+<div style="width:15.384615384615385%;background:#eab308"></div>
+<div style="width:7.6923076923076925%;background:#94a3b8"></div>
+</div></td>
+<td>9</td><td>1</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">0</td></tr>
+<tr><td>Mani 2014</td>
+<td style="color:var(--green);font-weight:700">97%</td>
+<td><div class="bar" style="height:14px">
+<div style="width:69.23076923076923%;background:#22c55e"></div>
+<div style="width:7.6923076923076925%;background:#eab308"></div>
+<div style="width:23.076923076923077%;background:#94a3b8"></div>
+</div></td>
+<td>9</td><td>0</td>
+<td style="color:var(--red)">0</td>
+<td style="color:var(--orange)">0</td></tr>
+</tbody></table></div>
+<h2>Detailed Disagreements</h2>
+<p class="sub">Where the LLM semantically disagreed with the human reviewer</p>
+<div class="scroll"><table><thead><tr><th>Paper</th><th>Field</th><th>Human Review</th><th>LLM Extraction</th><th>Detail</th></tr></thead><tbody>
+<tr><td>Yates 2016</td><td>Diagnostic Performance</td>
+<td style="color:var(--orange)">Spearman/Pearson Correlation</td>
+<td style="color:var(--blue)">{&#x27;r_squared&#x27;}</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;correlation&#x27;} | LLM: {&#x27;r_squared&#x27;}</td></tr>
+<tr><td>Cavaillez 2021</td><td>Indications</td>
+<td style="color:var(--orange)">AF; Treatment/Prevention of VTE</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem"></td></tr>
+<tr><td>Chang 2016</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Trough level (just prior to next dose, ~ 11 hours post-dose for apixaban/dabigatran and ~23 hours po</td>
+<td style="color:var(--blue)">[&#x27;Random level&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;trough&#x27;} | LLM: {&#x27;random&#x27;}</td></tr>
+<tr><td>Menon 2018</td><td>Indications</td>
+<td style="color:var(--orange)">Treatment/Prevention of VTE</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem"></td></tr>
+<tr><td>Menon 2018</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">High body weight/obesity</td>
+<td style="color:var(--blue)">[&#x27;Drug-DOAC pharmacokinetic interactions&#x27;, &#x27;Advanced age/frailty&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;obesity&#x27;} | LLM: {&#x27;advanced_age&#x27;, &#x27;drug_interactions&#x27;}</td></tr>
+<tr><td>Menon 2018</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose); Trough level (just prior to next dose, ~ 11 hours post-dose for ap</td>
+<td style="color:var(--blue)">[&#x27;Random level&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;trough&#x27;, &#x27;peak&#x27;} | LLM: {&#x27;random&#x27;}</td></tr>
+<tr><td>Menon 2018</td><td>Diagnostic Performance</td>
+<td style="color:var(--orange)">Spearman/Pearson Correlation</td>
+<td style="color:var(--blue)">{&#x27;r_squared&#x27;}</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;correlation&#x27;} | LLM: {&#x27;r_squared&#x27;}</td></tr>
+<tr><td>Zhang 2020</td><td>Study Design</td>
+<td style="color:var(--orange)">Other: Method Development and Validation</td>
+<td style="color:var(--blue)">Pharmacokinetic Study</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.13</td></tr>
+<tr><td>Zhang 2020</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Timing not reported</td>
+<td style="color:var(--blue)">[&#x27;Random level&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;not_reported&#x27;} | LLM: {&#x27;random&#x27;}</td></tr>
+<tr><td>Terrier 2023</td><td>Study Design</td>
+<td style="color:var(--orange)">Pharmacokinetic study</td>
+<td style="color:var(--blue)">In Silico Simulation Analysis</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.28</td></tr>
+<tr><td>Terrier 2023</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose); Trough level (just prior to next dose, ~ 11 hours post-dose for ap</td>
+<td style="color:var(--blue)">[&#x27;Serial PK/PD profile&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;trough&#x27;, &#x27;peak&#x27;} | LLM: {&#x27;serial&#x27;}</td></tr>
+<tr><td>Kroll 2017</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose); Trough level (just prior to next dose, ~ 11 hours post-dose for ap</td>
+<td style="color:var(--blue)">[&#x27;Serial PK/PD profile&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;trough&#x27;, &#x27;random&#x27;, &#x27;peak&#x27;} | LLM: {&#x27;serial&#x27;}</td></tr>
+<tr><td>Amundsen 2024</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Random level</td>
+<td style="color:var(--blue)">[&#x27;Residual level after interruption / pre-procedural&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;random&#x27;} | LLM: {&#x27;residual&#x27;}</td></tr>
+<tr><td>Meinel 2023</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Timing not reported</td>
+<td style="color:var(--blue)">[&#x27;Residual level after interruption / pre-procedural&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;not_reported&#x27;} | LLM: {&#x27;residual&#x27;}</td></tr>
+<tr><td>Solms 2020</td><td>Study Design</td>
+<td style="color:var(--orange)">Other: Post hoc exposure–response analyses</td>
+<td style="color:var(--blue)">Non-Randomized Observational Study</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.21</td></tr>
+<tr><td>Tanigawa 2013</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Advanced age/frailty</td>
+<td style="color:var(--blue)">[&#x27;Chronic kidney disease/dialysis&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;advanced_age&#x27;} | LLM: {&#x27;ckd&#x27;}</td></tr>
+<tr><td>Tanigawa 2013</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose)</td>
+<td style="color:var(--blue)">[&#x27;Random level&#x27;, &#x27;Serial PK/PD profile&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;peak&#x27;} | LLM: {&#x27;serial&#x27;, &#x27;random&#x27;}</td></tr>
+<tr><td>Squizzato 2022</td><td>Study Design</td>
+<td style="color:var(--orange)">Other: Position Paper/Expert Opinion</td>
+<td style="color:var(--blue)">Other</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.24</td></tr>
+<tr><td>Comuth 2018</td><td>Publication Year</td>
+<td style="color:var(--orange)">2017</td>
+<td style="color:var(--blue)">2018</td>
+<td style="color:var(--t3);font-size:.78rem"></td></tr>
+<tr><td>Comuth 2018</td><td>Study Design</td>
+<td style="color:var(--orange)">Non-randomized experimental study</td>
+<td style="color:var(--blue)">Other</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.16</td></tr>
+<tr><td>Dias 2016</td><td>Journal</td>
+<td style="color:var(--orange)">American Journal of Nephrology</td>
+<td style="color:var(--blue)">Am J Nephrol</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.57</td></tr>
+<tr><td>Dias 2016</td><td>Indications</td>
+<td style="color:var(--orange)">Not reported</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem"></td></tr>
+<tr><td>Baumann-Durchschein 2017</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Urgent/emergent procedure/surgery</td>
+<td style="color:var(--blue)">[&#x27;Advanced age/frailty&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;urgent_surgery&#x27;} | LLM: {&#x27;advanced_age&#x27;}</td></tr>
+<tr><td>P&#x27;ng 2024</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Advanced age/frailty; Urgent/emergent procedure/surgery</td>
+<td style="color:var(--blue)">[&#x27;Chronic kidney disease/dialysis&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;urgent_surgery&#x27;, &#x27;advanced_age&#x27;} | LLM: {&#x27;ckd&#x27;}</td></tr>
+<tr><td>Hu 2015</td><td>Journal</td>
+<td style="color:var(--orange)">Pacing and Clinical Electrophysiology</td>
+<td style="color:var(--blue)">PACE</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.20</td></tr>
+<tr><td>Zabczyk 2021</td><td>Journal</td>
+<td style="color:var(--orange)">Archives of Pathology and Laboratory Medicine</td>
+<td style="color:var(--blue)">Arch Pathol Lab Med</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.59</td></tr>
+<tr><td>Testa 2018</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Advanced age/frailty</td>
+<td style="color:var(--blue)">[&#x27;Chronic kidney disease/dialysis&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;advanced_age&#x27;} | LLM: {&#x27;ckd&#x27;}</td></tr>
+<tr><td>Berge 2024</td><td>Indications</td>
+<td style="color:var(--orange)">Treatment/Prevention of VTE</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem"></td></tr>
+<tr><td>Kozlov 2019</td><td>Study Design</td>
+<td style="color:var(--orange)">Pharmacokinetic study</td>
+<td style="color:var(--blue)">Diagnostic Test Accuracy Study</td>
+<td style="color:var(--t3);font-size:.78rem">Sim=0.43</td></tr>
+<tr><td>Jaffer 2015</td><td>Indications</td>
+<td style="color:var(--orange)">AF; Treatment/Prevention of VTE</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem"></td></tr>
+<tr><td>Jaffer 2015</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose); Trough level (just prior to next dose, ~ 11 hours post-dose for ap</td>
+<td style="color:var(--blue)">[&#x27;Random level&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;trough&#x27;, &#x27;peak&#x27;} | LLM: {&#x27;random&#x27;}</td></tr>
+<tr><td>Lin 2021</td><td>Country</td>
+<td style="color:var(--orange)">China</td>
+<td style="color:var(--blue)">Taiwan</td>
+<td style="color:var(--t3);font-size:.78rem"></td></tr>
+<tr><td>Verhamme 2016</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose); Trough level (just prior to next dose, ~ 11 hours post-dose for ap</td>
+<td style="color:var(--blue)">[&#x27;Random level&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;trough&#x27;, &#x27;peak&#x27;} | LLM: {&#x27;random&#x27;}</td></tr>
+<tr><td>Sairaku 2020</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Trough level (just prior to next dose, ~ 11 hours post-dose for apixaban/dabigatran and ~23 hours po</td>
+<td style="color:var(--blue)">[&#x27;Residual level after interruption / pre-procedural&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;trough&#x27;} | LLM: {&#x27;residual&#x27;}</td></tr>
+<tr><td>Sairaku 2020</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Anti-Xa assays using heparin calibrators (IU/mL)</td>
+<td style="color:var(--blue)">[&#x27;Coagulation testing - Activated partial thromboplastin time (aPTT)&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;anti_xa_heparin&#x27;} | LLM: {&#x27;aptt&#x27;, &#x27;pt&#x27;, &#x27;tt&#x27;}</td></tr>
+<tr><td>Liu 2022</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose); Trough level (just prior to next dose, ~ 11 hours post-dose for ap</td>
+<td style="color:var(--blue)">[&#x27;Serial PK/PD profile&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;trough&#x27;, &#x27;peak&#x27;} | LLM: {&#x27;serial&#x27;}</td></tr>
+<tr><td>Wendte 2016</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Random level</td>
+<td style="color:var(--blue)">[&#x27;Residual level after interruption / pre-procedural&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;random&#x27;} | LLM: {&#x27;residual&#x27;}</td></tr>
+<tr><td>Shin 2018</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Acute stroke/thrombolysis</td>
+<td style="color:var(--blue)">[&#x27;Chronic kidney disease/dialysis&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;acute_stroke&#x27;} | LLM: {&#x27;ckd&#x27;}</td></tr>
+<tr><td>Maas 2018</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Chronic kidney disease/dialysis</td>
+<td style="color:var(--blue)">[&#x27;Advanced age/frailty&#x27;]</td>
+<td style="color:var(--t3);font-size:.78rem">Human: {&#x27;ckd&#x27;} | LLM: {&#x27;advanced_age&#x27;}</td></tr>
+</tbody></table></div>
+<h2>LLM Missed (Present in Human Review)</h2>
+<div class="scroll"><table><thead><tr><th>Paper</th><th>Field</th><th>Human Value</th></tr></thead><tbody>
+<tr><td>Cavaillez 2021</td><td>Publication Year</td>
+<td style="color:var(--orange)">2021</td></tr>
+<tr><td>Cavaillez 2021</td><td>Country</td>
+<td style="color:var(--orange)">France</td></tr>
+<tr><td>Cavaillez 2021</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Random level</td></tr>
+<tr><td>Kopytek 2020</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Genetic polymorphism (e.g., CYP polymorphism)</td></tr>
+<tr><td>Gavrilova 2023</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Random level</td></tr>
+<tr><td>Kroll 2017</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT)</td></tr>
+<tr><td>Cappannoli 2022</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT)</td></tr>
+<tr><td>Nakagawa 2023</td><td>Country</td>
+<td style="color:var(--orange)">Japan</td></tr>
+<tr><td>Perlman 2019</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT)</td></tr>
+<tr><td>Amundsen 2024</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Acute stroke/thrombolysis</td></tr>
+<tr><td>Meinel 2023</td><td>Country</td>
+<td style="color:var(--orange)">Other:</td></tr>
+<tr><td>Meinel 2023</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Advanced age/frailty; Acute stroke/thrombolysis; DOAC-associated bleeding + DOAC reversal</td></tr>
+<tr><td>Meinel 2023</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT)</td></tr>
+<tr><td>Solms 2020</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Timing not reported</td></tr>
+<tr><td>Lenoir 2022</td><td>Diagnostic Performance</td>
+<td style="color:var(--orange)">Spearman/Pearson Correlation</td></tr>
+<tr><td>Squizzato 2022</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Low body weight; Chronic kidney disease/dialysis; Drug-DOAC pharmacokinetic interactions; Advanced a</td></tr>
+<tr><td>Squizzato 2022</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Trough level (just prior to next dose, ~ 11 hours post-dose for apixaban/dabigatran and ~23 hours po</td></tr>
+<tr><td>Squizzato 2022</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT)</td></tr>
+<tr><td>Lin 2020</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Chronic kidney disease/dialysis; Drug-DOAC pharmacokinetic interactions; Advanced age/frailty</td></tr>
+<tr><td>Ashton 2021</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Timing not reported</td></tr>
+<tr><td>Ashton 2021</td><td>Clinical Outcomes</td>
+<td style="color:var(--orange)">{&#x27;stroke_tia&#x27;, &#x27;bleeding&#x27;, &#x27;vte&#x27;}</td></tr>
+<tr><td>Baumann-Durchschein 2017</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT)</td></tr>
+<tr><td>P&#x27;ng 2024</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Random level</td></tr>
+<tr><td>P&#x27;ng 2024</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--orange)">50 ng/mL</td></tr>
+<tr><td>P&#x27;ng 2024</td><td>Clinical Outcomes</td>
+<td style="color:var(--orange)">{&#x27;stroke_tia&#x27;, &#x27;bleeding&#x27;, &#x27;vte&#x27;}</td></tr>
+<tr><td>Mills 2012</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Chronic kidney disease/dialysis; Advanced age/frailty; Elective procedure/surgery</td></tr>
+<tr><td>Mills 2012</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT); Anti-Xa assays using heparin calibrators (IU/mL)</td></tr>
+<tr><td>Mills 2012</td><td>Diagnostic Performance</td>
+<td style="color:var(--orange)">Spearman/Pearson Correlation</td></tr>
+<tr><td>Testa 2019</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Chronic kidney disease/dialysis; Advanced age/frailty</td></tr>
+<tr><td>Testa 2019</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose); Trough level (just prior to next dose, ~ 11 hours post-dose for ap</td></tr>
+<tr><td>Testa 2019</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--orange)">50 ng/mL</td></tr>
+<tr><td>Hu 2015</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Trough level (just prior to next dose, ~ 11 hours post-dose for apixaban/dabigatran and ~23 hours po</td></tr>
+<tr><td>Hu 2015</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--orange)">30 ng/mL</td></tr>
+<tr><td>Hu 2015</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT)</td></tr>
+<tr><td>Hu 2015</td><td>Diagnostic Performance</td>
+<td style="color:var(--orange)">Sensitivity; Specificity</td></tr>
+<tr><td>Ezekowitz 2007</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Advanced age/frailty</td></tr>
+<tr><td>Ezekowitz 2007</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT)</td></tr>
+<tr><td>Kozlov 2019</td><td>Country</td>
+<td style="color:var(--orange)">Russia</td></tr>
+<tr><td>Kozlov 2019</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Elective procedure/surgery</td></tr>
+<tr><td>Jaffer 2015</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Thrombin generation assay</td></tr>
+<tr><td>Sairaku 2020</td><td>Relevant Subgroups</td>
+<td style="color:var(--orange)">Chronic kidney disease/dialysis; Advanced age/frailty; Elective procedure/surgery</td></tr>
+<tr><td>Bhagirath 2017</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Trough level (just prior to next dose, ~ 11 hours post-dose for apixaban/dabigatran and ~23 hours po</td></tr>
+<tr><td>Bhagirath 2017</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--orange)">Other</td></tr>
+<tr><td>Bhagirath 2017</td><td>Clinical Outcomes</td>
+<td style="color:var(--orange)">{&#x27;stroke_tia&#x27;, &#x27;bleeding&#x27;, &#x27;vte&#x27;}</td></tr>
+<tr><td>Liu 2022</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--orange)">Other</td></tr>
+<tr><td>Wendte 2016</td><td>Comparator Assays</td>
+<td style="color:var(--orange)">Conventional coagulation testing (PT, aPTT, TT); Anti-Xa assays using heparin calibrators (IU/mL)</td></tr>
+<tr><td>Shin 2018</td><td>Timing of Measurement</td>
+<td style="color:var(--orange)">Peak level (2-4 hours post-dose); Trough level (just prior to next dose, ~ 11 hours post-dose for ap</td></tr>
+<tr><td>Shin 2018</td><td>Clinical Outcomes</td>
+<td style="color:var(--orange)">{&#x27;bleeding&#x27;}</td></tr>
+<tr><td>Yamashita 2024</td><td>Journal</td>
+<td style="color:var(--orange)">Thrombosis Research</td></tr>
+<tr><td>Yamashita 2024</td><td>Country</td>
+<td style="color:var(--orange)">Japan</td></tr>
+</tbody></table></div>
+<h2>LLM Found Extra (Not in Human Review)</h2>
+<p class="sub">LLM extracted data the human reviewer left empty -- may indicate LLM found relevant info or over-extracted</p>
+<div class="scroll"><table><thead><tr><th>Paper</th><th>Field</th><th>LLM Value</th></tr></thead><tbody>
+<tr><td>Kopytek 2020</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td></tr>
+<tr><td>Lin 2019</td><td>Coagulation Tests</td>
+<td style="color:var(--blue)">{&#x27;aptt&#x27;, &#x27;pt&#x27;}</td></tr>
+<tr><td>Gavrilova 2023</td><td>Coagulation Tests</td>
+<td style="color:var(--blue)">{&#x27;aptt&#x27;, &#x27;pt&#x27;}</td></tr>
+<tr><td>Cappannoli 2022</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td></tr>
+<tr><td>Zhu 2022</td><td>Diagnostic Performance</td>
+<td style="color:var(--blue)">{&#x27;correlation&#x27;}</td></tr>
+<tr><td>Amundsen 2024</td><td>Coagulation Tests</td>
+<td style="color:var(--blue)">{&#x27;aptt&#x27;}</td></tr>
+<tr><td>Amundsen 2024</td><td>Diagnostic Performance</td>
+<td style="color:var(--blue)">{&#x27;correlation&#x27;}</td></tr>
+<tr><td>Meinel 2023</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td></tr>
+<tr><td>Lenoir 2022</td><td>Clinical Outcomes</td>
+<td style="color:var(--blue)">[&#x27;Thromboembolism&#x27;, &#x27;Stroke/Transient Ischemic Attack (TIA)&#x27;, &#x27;Pulmonary embolism (PE)&#x27;, &#x27;Deep venou</td></tr>
+<tr><td>Tanigawa 2013</td><td>Diagnostic Performance</td>
+<td style="color:var(--blue)">{&#x27;correlation&#x27;}</td></tr>
+<tr><td>Squizzato 2022</td><td>Publication Year</td>
+<td style="color:var(--blue)">2022</td></tr>
+<tr><td>Lin 2020</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td></tr>
+<tr><td>Comuth 2018</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--blue)">[&#x27;50 ng/mL&#x27;]</td></tr>
+<tr><td>Comuth 2018</td><td>Comparator Assays</td>
+<td style="color:var(--blue)">[&#x27;Coagulation testing - Dilute thrombin time (dTT)&#x27;]</td></tr>
+<tr><td>Zabczyk 2021</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--blue)">[&#x27;30 ng/mL&#x27;, &#x27;75 ng/mL&#x27;, &#x27;Other&#x27;]</td></tr>
+<tr><td>Zabczyk 2021</td><td>Clinical Outcomes</td>
+<td style="color:var(--blue)">[&#x27;Thromboembolism&#x27;, &#x27;Deep venous thrombosis (DVT)&#x27;]</td></tr>
+<tr><td>Kozlov 2019</td><td>Coagulation Tests</td>
+<td style="color:var(--blue)">{&#x27;aptt&#x27;, &#x27;pt&#x27;}</td></tr>
+<tr><td>Jaffer 2015</td><td>Relevant Subgroups</td>
+<td style="color:var(--blue)">[&#x27;Chronic kidney disease/dialysis&#x27;]</td></tr>
+<tr><td>Jaffer 2015</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--blue)">[&#x27;50 ng/mL&#x27;]</td></tr>
+<tr><td>Jaffer 2015</td><td>Clinical Outcomes</td>
+<td style="color:var(--blue)">[&#x27;Thromboembolism&#x27;, &#x27;Stroke/Transient Ischemic Attack (TIA)&#x27;]</td></tr>
+<tr><td>Kok 2022</td><td>Comparator Assays</td>
+<td style="color:var(--blue)">[&#x27;Anti-Xa assays with LMWH calibrators (IU/mL)&#x27;]</td></tr>
+<tr><td>Kok 2022</td><td>Diagnostic Performance</td>
+<td style="color:var(--blue)">{&#x27;correlation&#x27;, &#x27;r_squared&#x27;}</td></tr>
+<tr><td>Lin 2021</td><td>Thresholds/Cutoffs</td>
+<td style="color:var(--blue)">[&#x27;Other&#x27;]</td></tr>
+<tr><td>Eikelboom 2013</td><td>Relevant Subgroups</td>
+<td style="color:var(--blue)">[&#x27;Chronic kidney disease/dialysis&#x27;]</td></tr>
+<tr><td>Eikelboom 2013</td><td>Coagulation Tests</td>
+<td style="color:var(--blue)">{&#x27;pt&#x27;}</td></tr>
+<tr><td>Verhamme 2016</td><td>Coagulation Tests</td>
+<td style="color:var(--blue)">{&#x27;pt&#x27;}</td></tr>
+<tr><td>Sairaku 2020</td><td>Coagulation Tests</td>
+<td style="color:var(--blue)">{&#x27;aptt&#x27;}</td></tr>
+<tr><td>Sairaku 2020</td><td>Clinical Outcomes</td>
+<td style="color:var(--blue)">[&#x27;Thromboembolism&#x27;]</td></tr>
+<tr><td>Wendte 2016</td><td>Clinical Outcomes</td>
+<td style="color:var(--blue)">[&#x27;Bleeding/Hemostasis&#x27;]</td></tr>
+</tbody></table></div>
+<h2>Key Findings</h2>
+<div class="grid">
+<div class="card" style="text-align:left"><div class="label">Strongest Fields</div>
+<div style="margin:.3rem 0"><span style="color:var(--green);font-weight:700">100%</span> DOACs Included</div>
+<div style="margin:.3rem 0"><span style="color:var(--green);font-weight:700">94%</span> Publication Year</div>
+<div style="margin:.3rem 0"><span style="color:var(--green);font-weight:700">91%</span> Journal</div>
+</div>
+<div class="card" style="text-align:left"><div class="label">Weakest Fields</div>
+<div style="margin:.3rem 0"><span style="color:var(--red);font-weight:700">45%</span> Thresholds/Cutoffs</div>
+<div style="margin:.3rem 0"><span style="color:var(--red);font-weight:700">43%</span> Comparator Assays</div>
+<div style="margin:.3rem 0"><span style="color:var(--red);font-weight:700">36%</span> Relevant Subgroups</div>
+</div>
+<div class="card" style="text-align:left"><div class="label">Most Disagreements</div>
+<div style="margin:.3rem 0"><span style="color:var(--red);font-weight:700">13</span> Timing of Measurement</div>
+<div style="margin:.3rem 0"><span style="color:var(--red);font-weight:700">7</span> Relevant Subgroups</div>
+<div style="margin:.3rem 0"><span style="color:var(--red);font-weight:700">6</span> Study Design</div>
+<div style="margin:.3rem 0"><span style="color:var(--red);font-weight:700">5</span> Indications</div>
+<div style="margin:.3rem 0"><span style="color:var(--red);font-weight:700">3</span> Journal</div>
+</div></div>
+<footer>
+  Generated by IE-Mistral comparison tool &bull; Semantic-level analysis &bull; 2026-04-26 17:18 UTC<br>
+  Human source: Covidence export (Pooja + Athavan Abstraction Lock 19MAR2026) &bull; 
+  LLM source: df_annotations.csv
+</footer>
+</body></html>
