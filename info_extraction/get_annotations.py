@@ -9,9 +9,9 @@ from pathlib import Path
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-from mistralai import Mistral
+from mistralai.client import Mistral
 from mistralai.extra import response_format_from_pydantic_model
-from mistralai.models import OCRResponse
+from mistralai.client.models import OCRResponse
 from loguru import logger
 import fitz as pymupdf
 

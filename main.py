@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from loguru import logger
 import sys
 from tqdm import tqdm
-from mistralai import Mistral
+from mistralai.client import Mistral
 from rich.traceback import install
 
 from info_extraction.to_markdown import convert_to_markdown

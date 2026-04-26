@@ -1,5 +1,5 @@
 from pathlib import Path
-from mistralai.models import OCRResponse
+from mistralai.client.models import OCRResponse
 
 
 def replace_images_in_markdown_annotated(markdown_str: str, images_dict: dict) -> str:

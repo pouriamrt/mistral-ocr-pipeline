@@ -705,7 +705,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.1.0" },
     { name = "langchain-openai", specifier = ">=1.1.0" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "mistralai", specifier = ">=1.9.11" },
+    { name = "mistralai", specifier = ">=2.4.2" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pyarrow", specifier = ">=21.0.0" },
     { name = "pymupdf", specifier = ">=1.26.7" },
