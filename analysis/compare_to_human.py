@@ -3,10 +3,10 @@
 Run:
     uv run python analysis/compare_to_human.py
 
-Outputs:
-    docs/comparisons/2026-04-26-comparison-report.md          (human-readable report)
-    docs/comparisons/2026-04-26-per-paper-agreement.csv       (one row per paper, score per domain)
-    docs/comparisons/2026-04-26-disagreements.csv             (every field/paper disagreement)
+Outputs (dated by RUN_DATE below):
+    docs/comparisons/{RUN_DATE}-comparison-report.md          (human-readable report)
+    docs/comparisons/{RUN_DATE}-per-paper-agreement.csv       (one row per paper, score per domain)
+    docs/comparisons/{RUN_DATE}-disagreements.csv             (every field/paper disagreement)
 """
 
 from __future__ import annotations
@@ -26,9 +26,11 @@ HU_CSV = ROOT / "data" / "human" / "Pooja + Athavan Abstraction Lock 19MAR2026.c
 OUT_DIR = ROOT / "docs" / "comparisons"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-REPORT_MD = OUT_DIR / "2026-04-26-comparison-report.md"
-PER_PAPER_CSV = OUT_DIR / "2026-04-26-per-paper-agreement.csv"
-DISAGREEMENTS_CSV = OUT_DIR / "2026-04-26-disagreements.csv"
+RUN_DATE = "2026-05-03"
+REPORT_MD = OUT_DIR / f"{RUN_DATE}-comparison-report.md"
+PER_PAPER_CSV = OUT_DIR / f"{RUN_DATE}-per-paper-agreement.csv"
+DISAGREEMENTS_CSV = OUT_DIR / f"{RUN_DATE}-disagreements.csv"
+HTML_REPORT_NAME = f"{RUN_DATE}-comparison-report.html"
 
 
 # ---------------------------------------------------------------------------
@@ -446,21 +448,6 @@ def assemble_human_outcomes(row: pd.Series) -> list[str]:
     return out
 
 
-def assemble_human_followup(row: pd.Series) -> list[str]:
-    """Only collect follow-up if the corresponding outcome gate is Yes."""
-    out = []
-    for gate, fu_col in [
-        ("Bleeding/Hemostasis", "Bleeding/Hemostasis Outcome Follow-Up"),
-        ("Stroke/TIA", "Stroke/TIA Outcome Follow-Up"),
-        ("DVT/PE", "DVT/PE Outcome Follow-Up"),
-    ]:
-        if is_yes(row.get(gate)):
-            v = row.get(fu_col)
-            if not is_blank(v):
-                out.append(str(v).strip())
-    return out
-
-
 def assemble_human_definition(row: pd.Series) -> list[str]:
     out = []
     for gate, def_col in [
@@ -538,9 +525,6 @@ def main() -> None:
     pd.Series([assemble_human_doacs(r) for _, r in hu_paired.iterrows()])
     derived_outcomes_hu = pd.Series(
         [assemble_human_outcomes(r) for _, r in hu_paired.iterrows()]
-    )
-    derived_followup_hu = pd.Series(
-        [assemble_human_followup(r) for _, r in hu_paired.iterrows()]
     )
     derived_defn_hu = pd.Series(
         [assemble_human_definition(r) for _, r in hu_paired.iterrows()]
@@ -660,13 +644,6 @@ def main() -> None:
             "Outcomes",
             ai_paired["Clinical Outcomes"],
             derived_outcomes_hu,
-            "multiselect_assembled",
-        ),
-        (
-            "Clinical Outcome Follow-Up",
-            "Outcomes",
-            ai_paired["Clinical Outcome - follow-up duration"],
-            derived_followup_hu,
             "multiselect_assembled",
         ),
         (
@@ -819,12 +796,12 @@ def write_report(
     lines.append("# DOAC Extraction — AI vs Human Gold-Standard Comparison Report")
     lines.append("")
     lines.append(
-        "_Run: 2026-04-26 — after the audit-driven prompt refinements landed in branch `main`._"
+        f"_Run: {RUN_DATE} — after the post-Joseph-feedback prompt refinements (timing-of-DOAC-measurement strict-null policy, removal of follow-up-duration field, methods/results-only evidence gate on assay technique fields) landed in branch `main`._"
     )
     lines.append("")
     lines.append(
-        "> **Companion visual report** with KPI cards, stacked-bar distributions, per-paper drill-downs, and a `Changes from v1` delta section is at [`2026-04-26-comparison-report.html`](2026-04-26-comparison-report.html). "
-        "The HTML uses a richer semantic-concept comparator that reports overall accuracy of **72.7%** vs the immediately-prior-run baseline of **73.3%** — essentially flat (**−0.6pp**), with significant gains on bibliography/population fields offset by regressions on Timing, Thresholds, and Comparator Assays. See § 7b for the per-field deltas."
+        f"> **Companion visual report** with KPI cards, stacked-bar distributions, per-paper drill-downs, and a `Changes from v1` delta section is at [`{HTML_REPORT_NAME}`]({HTML_REPORT_NAME}). "
+        "The HTML uses a richer semantic-concept comparator and computes per-field deltas vs the v1 baseline."
     )
     lines.append("")
 
@@ -872,13 +849,13 @@ def write_report(
         f"- 🟡 **Methods** is mixed ({fmt_pct(met_jac)}). Pre-Analytical Variables recall is {fmt_pct(pre_anal.avg_recall)} (AI tends to over-tag, lowering precision). **Timing of Measurement is the weakest individual field** ({fmt_pct(timing.avg_jaccard)}, {timing.n_hu_only} misses)."
     )
     lines.append(
-        f"- 🟢 **Outcome gate** improved sharply at the Yes/No level: AI and human now agree in {gate.n_exact}/{n_matched} papers ({fmt_pct(gate.avg_jaccard)}). The semantic comparator shows Clinical Outcomes domain at 56.2% (down ~5pp from prior run) — the gate is correct but the multi-label outcome capture isn't yet matching the prior run's recall."
+        f"- **Outcome gate**: AI and human agree in {gate.n_exact}/{n_matched} papers ({fmt_pct(gate.avg_jaccard)}) at the Yes/No level. Run-over-run deltas vs the prior run are computed in the companion HTML report."
     )
     lines.append(
-        f"- 🟡 **Comparator Assays** raw agreement is {fmt_pct(comparator.avg_jaccard)} but the apparent miss count is inflated by field-routing — see § 4.5. The acronym disambiguation rule (ACT/ACT-LR ≠ aPTT) eliminates the worst-class errors. Net change vs prior run: −7.1pp."
+        f"- **Comparator Assays** raw agreement is {fmt_pct(comparator.avg_jaccard)} — see § 4.5 for the field-routing breakdown and acronym-disambiguation behavior."
     )
     lines.append(
-        "- 🟡 **Mixed picture vs prior run**: improvements on Indications (+4.7pp), Coag Tests (+4.1pp), Country (+3.9pp), Journal (+2.8pp); regressions on Timing (−8.7pp), Thresholds (−9.0pp), Comparator Assays (−7.1pp). Overall almost flat (−0.6pp). See § 7b."
+        "- **Run-over-run deltas vs prior run**: see the companion HTML report's `Changes from v1` section for compatibility-group-aware per-field deltas."
     )
     lines.append("")
 
@@ -1067,12 +1044,9 @@ def write_report(
     lines.append("## 6. Known Comparison Caveats")
     lines.append("")
     lines.append(
-        "These two fields show **0% raw agreement** because the two sides use structurally different vocabularies, not because extraction failed:"
+        "This field shows **0% raw agreement** because the two sides use structurally different vocabularies, not because extraction failed:"
     )
     lines.append("")
-    lines.append(
-        '- **Clinical Outcome Follow-Up** — AI emits free-text durations (e.g., `"12 months"`, `"30 days"`); human uses categorical bins (`"> 6 months to ≤ 1 year"`, `"1 month to ≤ 3 months"`). A binning post-processor would be needed for a fair comparison.'
-    )
     lines.append(
         '- **Clinical Outcome Definition** — AI emits study-author paraphrase; human uses ISTH/standard definition tags (e.g., `"ISTH Major Bleeding (General Definition)"`).'
     )
@@ -1127,36 +1101,11 @@ def write_report(
     )
     lines.append("")
 
-    # ----- 7b. Pre-fix → post-fix delta from the semantic-concept comparator -----
-    lines.append("## 7b. Pre-fix → Post-fix Delta (semantic-concept comparator)")
+    # ----- 7b. Run-over-run deltas — see HTML companion -----
+    lines.append("## 7b. Run-over-run Delta (semantic-concept comparator)")
     lines.append("")
     lines.append(
-        "These deltas come from the companion HTML report's compatibility-group-aware comparator, comparing today's run to the **immediately-prior run** (Apr 12 baseline, before today's prompt edits). This is the apples-to-apples view of what the audit-driven changes actually moved."
-    )
-    lines.append("")
-    lines.append("| Field | Apr 12 baseline | Today | Δ |")
-    lines.append("|---|--:|--:|--:|")
-    lines.append("| Indications | 80% | 84.7% | 🟢 +4.7pp |")
-    lines.append("| Coagulation Tests | 76% | 80.1% | 🟢 +4.1pp |")
-    lines.append("| Country | 82% | 85.9% | 🟢 +3.9pp |")
-    lines.append("| Journal | 88% | 90.8% | 🟢 +2.8pp |")
-    lines.append("| DOACs Included | 98% | 99.5% | 🟢 +1.5pp |")
-    lines.append("| Diagnostic Performance | 55% | 56.5% | 🟢 +1.5pp |")
-    lines.append("| Publication Year | 94% | 94.5% | 🟡 +0.5pp |")
-    lines.append("| Study Design | 80% | 78.6% | 🟡 −1.4pp |")
-    lines.append("| Relevant Subgroups | 38% | 36.2% | 🟡 −1.8pp |")
-    lines.append("| Clinical Outcomes | 61% | 56.2% | 🟡 −4.8pp |")
-    lines.append("| Comparator Assays | 50% | 42.9% | 🔴 −7.1pp |")
-    lines.append("| Timing of Measurement | 54% | 45.3% | 🔴 −8.7pp |")
-    lines.append("| Thresholds/Cutoffs | 54% | 45.0% | 🔴 −9.0pp |")
-    lines.append("| **Overall** | **73.3%** | **72.7%** | 🟡 **−0.6pp** (flat) |")
-    lines.append("")
-    lines.append(
-        "**Interpretation.** Net result is essentially flat (−0.6pp). The audit-driven changes hit their bibliography and population targets cleanly (+2 to +5pp on Journal, Country, Indications, DOACs, Coag Tests). They did NOT move Subgroups (−1.8pp ≈ flat at 36-38%) or Diagnostic Performance (+1.5pp). Three fields regressed: **Timing (−8.7pp)** despite our hour-window and trough-trigger additions; **Thresholds/Cutoffs (−9pp)** which wasn't directly targeted; and **Comparator Assays (−7.1pp)** despite the ACT/ACT-LR disambiguation rule. The Outcomes domain (−4.8pp) shows the gate-fix improved Yes/No agreement but degraded multi-label capture — likely the trigger-phrase requirement is now too strict in cases where outcome language is implicit."
-    )
-    lines.append("")
-    lines.append(
-        '_Earlier draft of this report compared against an out-of-date hardcoded baseline (`V1_FIELD_ACC` constants set before Apr 12) and reported alarming regressions like "Relevant Subgroups −22.8pp" — those were artifacts of stale numbers, not real regressions. The deltas above use the actual Apr 12 run as the baseline._'
+        f"Run-over-run per-field deltas vs the prior run are computed by the companion HTML report's compatibility-group-aware comparator. See [`{HTML_REPORT_NAME}`]({HTML_REPORT_NAME}) — section `Changes from v1` — for the apples-to-apples view of what the most recent prompt edits moved."
     )
     lines.append("")
 
@@ -1174,10 +1123,7 @@ def write_report(
         f"2. **Outcome gate — {gate.n_disagree} residual disagreements**, now split roughly evenly between AI=No / Human=Yes (the dominant pattern) and AI=Yes / Human=No. With zero misses (no blanks) and 41/50 exact agreements, the gate is largely correct; spot-checking the remaining 9 will reveal whether the trigger-phrase bar is now slightly too high."
     )
     lines.append(
-        "3. **Field consolidation (post-processor, no prompt change).** AI's `Conventional Coag Tests Concurrent` field is populated for 17/31 papers where AI left `Comparator Assays` blank. A two-line post-processor that copies/merges those into `Comparator Assays` for downstream comparison would close ~half of the apparent miss gap without touching the prompts."
-    )
-    lines.append(
-        '4. **Follow-up duration binning.** AI emits free-text (`"12 months"`); human uses categorical bins (`"> 6 months to ≤ 1 year"`). A deterministic post-processor mapping durations into bins would unlock fair comparison on this field — currently 0% raw agreement is an artifact, not an extraction failure.'
+        "3. **Field consolidation (post-processor, no prompt change).** AI's `Conventional Coag Tests Concurrent` field is populated for some papers where AI left `Comparator Assays` blank. A two-line post-processor that copies/merges those into `Comparator Assays` for downstream comparison would close part of the apparent miss gap without touching the prompts."
     )
     lines.append("")
 

@@ -120,7 +120,6 @@ def _postprocess_row(row: dict) -> dict:
     """
     gate_key = "Clinical outcomes measured?"
     outcomes_key = "Clinical Outcomes"
-    followup_key = "Clinical Outcome - follow-up duration"
     definition_key = "Clinical Outcome - definition"
 
     gate_val = row.get(gate_key)
@@ -146,7 +145,7 @@ def _postprocess_row(row: dict) -> dict:
 
     # --- Enforce consistency: gate=No means all outcome fields must be null ---
     if str(row.get(gate_key, "")).strip() == "No":
-        for key in (outcomes_key, followup_key, definition_key):
+        for key in (outcomes_key, definition_key):
             if row.get(key) is not None and str(row.get(key)).strip() not in (
                 "",
                 "[]",

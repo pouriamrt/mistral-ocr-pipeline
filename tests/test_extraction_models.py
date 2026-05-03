@@ -137,7 +137,7 @@ class TestPairedFieldInvariant:
         sentence_fields = [f for f in field_names if f.endswith(self.SUFFIX)]
         for sf in sentence_fields:
             base = sf.removesuffix(self.SUFFIX)
-            # Some base fields use a `_flat` suffix (e.g. clinical_outcome_followup_flat)
+            # Some base fields use a `_flat` suffix (e.g. clinical_outcome_definition_flat)
             has_match = base in field_names or (base + "_flat") in field_names
             assert has_match, (
                 f"Model {model_cls.__name__}: '{sf}' has no matching base field "
